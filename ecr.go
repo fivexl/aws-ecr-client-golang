@@ -200,8 +200,8 @@ func AreThereCVEsToReport(client *ecr.Client, imageId ImageId, repo string, seve
 	fmt.Printf("\nFound the following CVEs\n")
 	table.Render()
 
-	fmt.Printf("\nIgnored CVE severity levels: %s\n", strings.Join(severityLevelsToIgnore, " ,"))
-	fmt.Printf("Ignored CVE's:               %s\n\n", strings.Join(cveToIgnore, " ,"))
+	fmt.Printf("\nIgnored CVE severity levels: %s\n", strings.Join(severityLevelsToIgnore, ", "))
+	fmt.Printf("Ignored CVE's:               %s\n\n", strings.Join(cveToIgnore, ", "))
 	fmt.Print("Final scan result: ")
 
 	if len(findings) > len(ignoredFindings) {
