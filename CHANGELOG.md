@@ -1,3 +1,7 @@
+### v0.2.1
+
+* Static binaries for use on Alpine Linux
+
 ### v0.2.0
 
 * Added possibility to skip push to the destination repository even if there are no CVEs found (useful for CI)
