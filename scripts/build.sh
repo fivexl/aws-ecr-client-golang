@@ -18,6 +18,9 @@ mkdir -p "${BUILD_DIR}" "${RELEASE_DIR}"
 TARGET_GOOSES=("linux" "darwin" "windows")
 TARGET_GOARCHES=("amd64" "arm")
 
+# Build static binaries so we can run them on alpine 
+CGO_ENABLED=0
+
 for OS in "${TARGET_GOOSES[@]}"
 do
     for ARCH in "${TARGET_GOARCHES[@]}"
@@ -28,7 +31,7 @@ do
         echo "Building for ${OS} and arch ${ARCH}"
         export GOOS="${OS}"
         export GOARCH="${ARCH}"
-        go build -o "build/${BINARY_NAME}-${GOOS}-${GOARCH}" -ldflags "-s -w -X main.VERSION=${VERSION}"
+        go build -a -o "build/${BINARY_NAME}-${GOOS}-${GOARCH}" -ldflags "-s -w -X main.VERSION=${VERSION}"
         cp "build/${BINARY_NAME}-${GOOS}-${GOARCH}" "build/${BINARY_NAME}"
         zip -j "${RELEASE_DIR}/${BINARY_NAME}_${VERSION}_${OS}_${ARCH}.zip" "build/${BINARY_NAME}"
         rm -rf "build/${BINARY_NAME}"
