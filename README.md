@@ -12,9 +12,36 @@ Features:
 
 ## Usage
 
+```
+NAME:
+   aws-ecr-client - AWS ECR client to automated push to ECR and handling of vulnerability.
+Version v0.1.0
+
+USAGE:
+   ecr-client-linux-amd64 [global options] command [command options] [arguments...]
+
+COMMANDS:
+   help, h  Shows a list of commands or help for one command
+
+GLOBAL OPTIONS:
+   --destination-repo value, -d value  Final destination of the image [$AWS_ECR_CLIENT_DESTINATION_REPO]
+   --tag value, -t value               Image tag to push [$AWS_ECR_CLIENT_IMAGE_TAG]
+   --stage-repo value, -s value        Repository where image will be sent for scanning before pushing it to destination repo with the tag <destination-repo-name>-<tag>-scan-<timestamp>. Will push directly to destination repo with the specified tag if no value provided (default: empty string) [$AWS_ECR_CLIENT_STAGE_REPO]
+   --ignore-levels value, -l value     Space-separated list of CVE severity levels to ignore. Valid severity levels are: CRITICAL, HIGH, MEDIUM, LOW, INFORMATIONAL, UNDEFINED (default: empty string) [$AWS_ECR_CLIENT_IGNORE_CVE_LEVEL]
+   --ignore-cve value, -c value        Space-separated list of individual CVE's to ignore. (default: empty string) [$AWS_ECR_CLIENT_IGNORE_CVE]
+   --help, -h                          show help (default: false)
 
 
-## Example
+  Find source code, usage examples, report issues, get support: https://github.com/fivexl/aws-ecr-client-golang
+  
+Required flags "destination-repo, tag" not set
+```
+
+## Releases
+
+Download official builds from [here](https://releases.fivexl.io/aws-ecr-client-golang/)
+
+## Examples
 
 ### Push of the real tag is stopped because of CVE
 
