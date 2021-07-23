@@ -114,6 +114,9 @@ func main() {
 	`, cli.AppHelpTemplate)
 
 	app.Action = func(c *cli.Context) error {
+
+		fmt.Printf("\naws-ecr-client, version %s\n", VERSION)
+
 		_, err := AreSeverityLevelsValid(cveLevelsIgnoreList)
 		if err != nil {
 			return err
