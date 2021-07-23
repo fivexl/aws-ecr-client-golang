@@ -36,6 +36,7 @@ func main() {
 	var destinationRepo string
 	var cveLevelsIgnoreList string
 	var cveIgnoreList string
+	var skipPush bool
 
 	app := &cli.App{
 		Usage: "AWS ECR client to automated push to ECR and handling of vulnerability.\nVersion " + VERSION,
@@ -84,6 +85,15 @@ func main() {
 				EnvVars:     []string{"AWS_ECR_CLIENT_IGNORE_CVE"},
 				Destination: &cveIgnoreList,
 			},
+			&cli.BoolFlag{
+				Name:        "skip-push",
+				Aliases:     []string{"p"},
+				Value:       false,
+				DefaultText: "false",
+				Usage:       "Only push to scanning silo and do not push to destination repo even if there are no CVE's (useful for CI).",
+				EnvVars:     []string{"AWS_ECR_CLIENT_SKIP_PUSH"},
+				Destination: &skipPush,
+			},
 		},
 	}
 
@@ -127,6 +137,11 @@ func main() {
 
 		if isScanFailed {
 			return fmt.Errorf("There are CVEs found. Fix them first. Will not proceed with pushing %s:%s\n", destinationRepo, tag)
+		}
+
+		if skipPush {
+			fmt.Printf("Skip push to destination repo because of --skip-push flag or AWS_ECR_CLIENT_SKIP_PUSH env variable\n")
+			return nil
 		}
 
 		fmt.Printf("\nPushing %s:%s\n\n", destinationRepo, tag)
