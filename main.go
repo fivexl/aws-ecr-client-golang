@@ -21,6 +21,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -32,6 +33,7 @@ var VERSION string
 func main() {
 
 	var tag string
+	var additionalTags string
 	var stageRepo string
 	var destinationRepo string
 	var cveLevelsIgnoreList string
@@ -52,10 +54,19 @@ func main() {
 			&cli.StringFlag{
 				Name:        "tag",
 				Aliases:     []string{"t"},
-				Usage:       "Image tag to push",
+				Usage:       "Image tag to push. Tag should already exist.",
 				EnvVars:     []string{"AWS_ECR_CLIENT_IMAGE_TAG"},
 				Destination: &tag,
 				Required:    true,
+			},
+			&cli.StringFlag{
+				Name:        "additional-tags",
+				Aliases:     []string{"a"},
+				Value:       "latest",
+				DefaultText: "latest",
+				Usage:       "Space-separated list of tags to add to the image and push.",
+				EnvVars:     []string{"AWS_ECR_CLIENT_ADDITIONAL_TAGS"},
+				Destination: &additionalTags,
 			},
 			&cli.StringFlag{
 				Name:        "stage-repo",
@@ -66,7 +77,6 @@ func main() {
 				EnvVars:     []string{"AWS_ECR_CLIENT_STAGE_REPO"},
 				Destination: &stageRepo,
 			},
-
 			&cli.StringFlag{
 				Name:        "ignore-levels",
 				Aliases:     []string{"l"},
@@ -151,15 +161,21 @@ func main() {
 			return err
 		}
 
-		fmt.Printf("\nPushing %s:%s\n\n", destinationRepo, "latest")
-		err = Tag(destinationRepo, tag, "latest")
-		if err != nil {
-			return err
-		}
+		additionalTagsList := strings.Fields(additionalTags)
+		if len(additionalTagsList) > 0 {
+			fmt.Printf("\nPushing additional tags: %s\n\n", strings.Join(additionalTagsList, ", "))
+			for _, additionalTag := range additionalTagsList {
+				err = Tag(destinationRepo, tag, additionalTag)
+				if err != nil {
+					return err
+				}
 
-		_, err = Push(destinationRepo, "latest")
-		if err != nil {
-			return err
+				_, err = Push(destinationRepo, additionalTag)
+				if err != nil {
+					return err
+				}
+				fmt.Printf("\n")
+			}
 		}
 
 		return nil

@@ -27,6 +27,7 @@ COMMANDS:
 GLOBAL OPTIONS:
    --destination-repo value, -d value  Final destination of the image [$AWS_ECR_CLIENT_DESTINATION_REPO]
    --tag value, -t value               Image tag to push [$AWS_ECR_CLIENT_IMAGE_TAG]
+   --additional-tags value, -a value   Space-separated list of tags to add to the image and push. (default: latest) [$AWS_ECR_CLIENT_ADDITIONAL_TAGS]
    --stage-repo value, -s value        Repository where image will be sent for scanning before pushing it to destination repo with the tag <destination-repo-name>-<tag>-scan-<timestamp>. Will push directly to destination repo with the specified tag if no value provided (default: empty string) [$AWS_ECR_CLIENT_STAGE_REPO]
    --ignore-levels value, -l value     Space-separated list of CVE severity levels to ignore. Valid severity levels are: CRITICAL, HIGH, MEDIUM, LOW, INFORMATIONAL, UNDEFINED (default: empty string) [$AWS_ECR_CLIENT_IGNORE_CVE_LEVEL]
    --ignore-cve value, -c value        Space-separated list of individual CVE's to ignore. (default: empty string) [$AWS_ECR_CLIENT_IGNORE_CVE]
@@ -116,7 +117,7 @@ docker-push: Preparing
 docker-push: Layer already exists
 docker-push: test: digest: sha256:1775bebec23e1f3ce486989bfc9ff3c4e951690df84aa9f926497d82f2ffca9d size: 528
 
-Pushing 798424800762.dkr.ecr.eu-central-1.amazonaws.com/alpine:latest
+Pushing additional tags: latest
 
 docker-push: The push refers to repository [798424800762.dkr.ecr.eu-central-1.amazonaws.com/alpine]
 docker-push: Preparing
