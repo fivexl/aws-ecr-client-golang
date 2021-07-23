@@ -19,7 +19,7 @@ TARGET_GOOSES=("linux" "darwin" "windows")
 TARGET_GOARCHES=("amd64" "arm")
 
 # Build static binaries so we can run them on alpine 
-CGO_ENABLED=0
+export CGO_ENABLED=0
 
 for OS in "${TARGET_GOOSES[@]}"
 do
