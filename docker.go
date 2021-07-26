@@ -72,7 +72,7 @@ func imagePush(dockerClient *client.Client, authConfig dockerTypes.AuthConfig, r
 }
 
 func imageTag(dockerClient *client.Client, imageId string, newImageId string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*120)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*600)
 	defer cancel()
 
 	err := dockerClient.ImageTag(ctx, imageId, newImageId)
