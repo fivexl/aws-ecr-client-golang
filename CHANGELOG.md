@@ -1,3 +1,7 @@
+### v0.2.2
+
+* Fix the issue that prevented correct tagging of image destined to the scanning repo (in case of the separate scanning repo)
+
 ### v0.2.1
 
 * Static binaries for use on Alpine Linux

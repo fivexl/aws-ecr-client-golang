@@ -71,11 +71,11 @@ func imagePush(dockerClient *client.Client, authConfig dockerTypes.AuthConfig, r
 	return getImageIdFromDockerDaemonJsonMessages(*buf)
 }
 
-func imageTag(dockerClient *client.Client, repo string, imageId string, destinationTag string) error {
+func imageTag(dockerClient *client.Client, imageId string, newImageId string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*120)
 	defer cancel()
 
-	err := dockerClient.ImageTag(ctx, repo+":"+imageId, repo+":"+destinationTag)
+	err := dockerClient.ImageTag(ctx, imageId, newImageId)
 	if err != nil {
 		return err
 	}

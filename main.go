@@ -131,8 +131,8 @@ func main() {
 		now := time.Now()
 		tagForScanning := repoName + "-" + tag + "-scan-" + fmt.Sprint(now.Unix())
 
-		fmt.Printf("\nFirst push image to scanning repo %s with the tag %s\n\n", stageRepo, tagForScanning)
-		err = Tag(destinationRepo, tag, tagForScanning)
+		fmt.Printf("\nFirst push image to scanning repo as %s:%s\n\n", stageRepo, tagForScanning)
+		err = Tag(destinationRepo+":"+tag, stageRepo+":"+tagForScanning)
 		if err != nil {
 			return err
 		}
@@ -168,7 +168,7 @@ func main() {
 		if len(additionalTagsList) > 0 {
 			fmt.Printf("\nPushing additional tags: %s\n\n", strings.Join(additionalTagsList, ", "))
 			for _, additionalTag := range additionalTagsList {
-				err = Tag(destinationRepo, tag, additionalTag)
+				err = Tag(destinationRepo+":"+tag, destinationRepo+":"+additionalTag)
 				if err != nil {
 					return err
 				}

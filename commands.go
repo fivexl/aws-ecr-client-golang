@@ -50,11 +50,11 @@ func IsScanFailed(destinationRepo string, imageId ImageId, findingScoreThreshold
 	return AreThereCVEsToReport(client, imageId, destinationRepo, strings.Fields(findingScoreThreshold), strings.Fields(cveIgnoreList))
 }
 
-func Tag(repo string, imageId string, destinationTag string) error {
+func Tag(imageId string, newImageId string) error {
 	cli, err := getDockerClient()
 	if err != nil {
 		return err
 	}
 
-	return imageTag(cli, repo, imageId, destinationTag)
+	return imageTag(cli, imageId, newImageId)
 }
