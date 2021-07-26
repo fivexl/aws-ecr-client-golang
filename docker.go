@@ -85,6 +85,7 @@ func imageTag(dockerClient *client.Client, imageId string, newImageId string) er
 
 func printDockerDaemonJsonMessages(message bytes.Buffer, prefix string) error {
 	decoder := json.NewDecoder(&message)
+	var previousMessage string
 	for {
 		var jsonMessage jsonmessage.JSONMessage
 		if err := decoder.Decode(&jsonMessage); err != nil {
@@ -97,7 +98,15 @@ func printDockerDaemonJsonMessages(message bytes.Buffer, prefix string) error {
 			return err
 		}
 		if jsonMessage.Status != "" {
-			fmt.Printf("%s: %s\n", prefix, jsonMessage.Status)
+			// Messages could get quite repetative like - Pushing, Pushing, Pushing
+			// since we are not printig layer id being pushed
+			// so we use this trick to avoid creating noise in the logs
+			if jsonMessage.Status == previousMessage {
+				fmt.Print(".")
+			} else {
+				fmt.Printf("\n%s: %s\n", prefix, jsonMessage.Status)
+				previousMessage = jsonMessage.Status
+			}
 		}
 	}
 	return nil

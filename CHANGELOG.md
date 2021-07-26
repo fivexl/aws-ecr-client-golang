@@ -1,3 +1,8 @@
+### v0.2.3
+
+* Increased push timeout to 10 min
+* Improved docker push output to reduce noise
+
 ### v0.2.2
 
 * Fix the issue that prevented correct tagging of image destined to the scanning repo (in case of the separate scanning repo)
