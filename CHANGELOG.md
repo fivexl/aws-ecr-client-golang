@@ -1,7 +1,7 @@
 ### v0.2.3
 
-* Increased push timeout to 10 min
-* Improved docker push output to reduce noise
+* Remove timeout from Docker operations
+* More compact docker push output to reduce noise
 
 ### v0.2.2
 

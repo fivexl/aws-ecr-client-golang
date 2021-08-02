@@ -25,7 +25,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"time"
 
 	dockerTypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
@@ -43,15 +42,13 @@ func getDockerClient() (*dockerClient.Client, error) {
 }
 
 func imagePush(dockerClient *client.Client, authConfig dockerTypes.AuthConfig, repo string, tag string) (ImageId, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*120)
-	defer cancel()
 
 	authConfigBytes, _ := json.Marshal(authConfig)
 	authConfigEncoded := base64.URLEncoding.EncodeToString(authConfigBytes)
 
 	target := repo + ":" + tag
 	opts := dockerTypes.ImagePushOptions{RegistryAuth: authConfigEncoded}
-	rd, err := dockerClient.ImagePush(ctx, target, opts)
+	rd, err := dockerClient.ImagePush(context.Background(), target, opts)
 	if err != nil {
 		return ImageId{}, err
 	}
@@ -72,10 +69,8 @@ func imagePush(dockerClient *client.Client, authConfig dockerTypes.AuthConfig, r
 }
 
 func imageTag(dockerClient *client.Client, imageId string, newImageId string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*600)
-	defer cancel()
 
-	err := dockerClient.ImageTag(ctx, imageId, newImageId)
+	err := dockerClient.ImageTag(context.Background(), imageId, newImageId)
 	if err != nil {
 		return err
 	}
