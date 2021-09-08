@@ -49,6 +49,37 @@ func GetFindingSeverityLevelsAsString() string {
 	return strings.Join(GetFindingSeverityLevelsAsList(), ", ")
 }
 
+func SortFindingsBySerityLevel(findings []types.ImageScanFinding) map[string][]types.ImageScanFinding {
+	result := map[string][]types.ImageScanFinding{}
+
+	for _, severity := range GetFindingSeverityLevelsAsList() {
+		result[severity] = []types.ImageScanFinding{}
+	}
+
+	for _, finding := range findings {
+		result[string(finding.Severity)] = append(result[string(finding.Severity)], finding)
+	}
+	return result
+}
+
+func GetIgnoredFindings(findings []types.ImageScanFinding, severityLevelsToIgnore []string, cveToIgnore []string) []types.ImageScanFinding {
+	result := []types.ImageScanFinding{}
+
+	for _, finding := range findings {
+		for _, severityLevel := range severityLevelsToIgnore {
+			if string(finding.Severity) == severityLevel {
+				result = append(result, finding)
+			}
+		}
+		for _, cve := range cveToIgnore {
+			if finding.Name != nil && string(*finding.Name) == cve {
+				result = append(result, finding)
+			}
+		}
+	}
+	return result
+}
+
 // TODO: is there a better way?
 func AreSeverityLevelsValid(levels string) (bool, error) {
 	for _, level := range strings.Fields(levels) {
@@ -121,7 +152,7 @@ func GetRepoName(registryName string) string {
 }
 
 // TODO: handle unsupported images like busybox or scratch that will fail the scan
-func getImageScanResults(client *ecr.Client, imageId ImageId, repo string) ([]types.ImageScanFinding, error) {
+func GetImageScanResults(client *ecr.Client, imageId ImageId, repo string) ([]types.ImageScanFinding, error) {
 	repoName := GetRepoName(repo)
 	input := ecr.DescribeImageScanFindingsInput{
 		ImageId: &types.ImageIdentifier{
@@ -149,17 +180,7 @@ func getImageScanResults(client *ecr.Client, imageId ImageId, repo string) ([]ty
 
 }
 
-func AreThereCVEsToReport(client *ecr.Client, imageId ImageId, repo string, severityLevelsToIgnore []string, cveToIgnore []string) (bool, error) {
-
-	findings, err := getImageScanResults(client, imageId, repo)
-	if err != nil {
-		return false, err
-	}
-
-	if len(findings) == 0 {
-		fmt.Printf("No CVE's found. Good job!")
-		return false, nil
-	}
+func PrintFindings(findings []types.ImageScanFinding, severityLevelsToIgnore []string, cveToIgnore []string) {
 
 	ignoredFindings := []types.ImageScanFinding{}
 	table := tablewriter.NewWriter(os.Stdout)
@@ -206,10 +227,7 @@ func AreThereCVEsToReport(client *ecr.Client, imageId ImageId, repo string, seve
 
 	if len(findings) > len(ignoredFindings) {
 		fmt.Printf("Failed\n\n")
-		return true, nil
+	} else {
+		fmt.Printf("Passed\n\n")
 	}
-
-	fmt.Printf("Passed\n\n")
-
-	return false, nil
 }

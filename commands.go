@@ -18,10 +18,6 @@ limitations under the License.
 
 package main
 
-import (
-	"strings"
-)
-
 func Push(destinationRepo string, tag string) (ImageId, error) {
 	client, err := GetECRClient()
 	if err != nil {
@@ -39,15 +35,6 @@ func Push(destinationRepo string, tag string) (ImageId, error) {
 	}
 
 	return imagePush(cli, authConfig, destinationRepo, tag)
-}
-
-func IsScanFailed(destinationRepo string, imageId ImageId, findingScoreThreshold string, cveIgnoreList string) (bool, error) {
-	client, err := GetECRClient()
-	if err != nil {
-		return true, err
-	}
-
-	return AreThereCVEsToReport(client, imageId, destinationRepo, strings.Fields(findingScoreThreshold), strings.Fields(cveIgnoreList))
 }
 
 func Tag(imageId string, newImageId string) error {

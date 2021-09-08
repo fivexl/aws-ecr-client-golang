@@ -38,6 +38,7 @@ func main() {
 	var destinationRepo string
 	var cveLevelsIgnoreList string
 	var cveIgnoreList string
+	var junitPath string
 	var skipPush bool
 
 	app := &cli.App{
@@ -95,6 +96,15 @@ func main() {
 				EnvVars:     []string{"AWS_ECR_CLIENT_IGNORE_CVE"},
 				Destination: &cveIgnoreList,
 			},
+			&cli.StringFlag{
+				Name:        "junit-report-path",
+				Aliases:     []string{"j"},
+				Value:       "",
+				DefaultText: "",
+				Usage:       "If set then CVE scan result will be written in JUNIT format to the path provided as a value. Useful for CI (like Jenkins) to keep ignored CVE visible",
+				EnvVars:     []string{"AWS_ECR_CLIENT_JUNIT_REPORT_PATH"},
+				Destination: &junitPath,
+			},
 			&cli.BoolFlag{
 				Name:        "skip-push",
 				Aliases:     []string{"p"},
@@ -143,12 +153,31 @@ func main() {
 		}
 
 		fmt.Printf("\nChecking scan result for the image %s:%s\n\n", stageRepo, tagForScanning)
-		isScanFailed, err := IsScanFailed(stageRepo, imageId, cveLevelsIgnoreList, cveIgnoreList)
+		client, err := GetECRClient()
+		if err != nil {
+			return err
+		}
+		findings, err := GetImageScanResults(client, imageId, stageRepo)
 		if err != nil {
 			return err
 		}
 
-		if isScanFailed {
+		PrintFindings(findings, strings.Fields(cveLevelsIgnoreList), strings.Fields(cveIgnoreList))
+
+		if junitPath != "" {
+			fmt.Printf("\nWriting junit report to: %s\n\n", junitPath)
+			junitFile, err := os.OpenFile(junitPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
+			if err != nil {
+				return err
+			}
+			defer junitFile.Close()
+			err = WriteJunitReport(findings, junitFile)
+			if err != nil {
+				return err
+			}
+		}
+
+		if len(findings) > 0 && len(findings) > len(GetIgnoredFindings(findings, strings.Fields(cveLevelsIgnoreList), strings.Fields(cveIgnoreList))) {
 			return fmt.Errorf("There are CVEs found. Fix them first. Will not proceed with pushing %s:%s\n", destinationRepo, tag)
 		}
 
