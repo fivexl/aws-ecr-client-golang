@@ -55,11 +55,6 @@ Note: Stage repo is not specified - will use destination repo as scanning silo
 
 First push image to scanning repo XXXXXXXXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine with the tag alpine-test-scan-1627040431
 
-docker-push: The push refers to repository [XXXXXXXXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine]
-docker-push: Preparing
-docker-push: Layer already exists
-docker-push: alpine-test-scan-1627040431: digest: sha256:1775bebec23e1f3ce486989bfc9ff3c4e951690df84aa9f926497d82f2ffca9d size: 528
-
 Checking scan result for the image XXXXXXXXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine:alpine-test-scan-1627040431
 
 Image scan status: COMPLETE
@@ -88,11 +83,6 @@ Note: Stage repo is not specified - will use destination repo as scanning silo
 
 First push image to scanning repo XXXXXXXXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine with the tag alpine-test-scan-1627040374
 
-docker-push: The push refers to repository [XXXXXXXXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine]
-docker-push: Preparing
-docker-push: Layer already exists
-docker-push: alpine-test-scan-1627040374: digest: sha256:1775bebec23e1f3ce486989bfc9ff3c4e951690df84aa9f926497d82f2ffca9d size: 528
-
 Checking scan result for the image XXXXXXXXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine:alpine-test-scan-1627040374
 
 Image scan status: COMPLETE
@@ -109,20 +99,11 @@ Ignored CVE's:               CVE-2020-28928
 
 Final scan result: Passed
 
-
 Pushing 798424800762.dkr.ecr.eu-central-1.amazonaws.com/alpine:test
-
-docker-push: The push refers to repository [798424800762.dkr.ecr.eu-central-1.amazonaws.com/alpine]
-docker-push: Preparing
-docker-push: Layer already exists
-docker-push: test: digest: sha256:1775bebec23e1f3ce486989bfc9ff3c4e951690df84aa9f926497d82f2ffca9d size: 528
 
 Pushing additional tags: latest
 
-docker-push: The push refers to repository [798424800762.dkr.ecr.eu-central-1.amazonaws.com/alpine]
-docker-push: Preparing
-docker-push: Layer already exists
-docker-push: latest: digest: sha256:1775bebec23e1f3ce486989bfc9ff3c4e951690df84aa9f926497d82f2ffca9d size: 528
+Done
 
 ```
 

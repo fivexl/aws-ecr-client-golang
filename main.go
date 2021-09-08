@@ -141,7 +141,7 @@ func main() {
 		now := time.Now()
 		tagForScanning := repoName + "-" + tag + "-scan-" + fmt.Sprint(now.Unix())
 
-		fmt.Printf("\nFirst push image to scanning repo as %s:%s\n\n", stageRepo, tagForScanning)
+		fmt.Printf("\nFirst push image to scanning repo as %s:%s\n", stageRepo, tagForScanning)
 		err = Tag(destinationRepo+":"+tag, stageRepo+":"+tagForScanning)
 		if err != nil {
 			return err
@@ -152,7 +152,7 @@ func main() {
 			return err
 		}
 
-		fmt.Printf("\nChecking scan result for the image %s:%s\n\n", stageRepo, tagForScanning)
+		fmt.Printf("\nChecking scan result for the image %s:%s\n", stageRepo, tagForScanning)
 		client, err := GetECRClient()
 		if err != nil {
 			return err
@@ -165,7 +165,7 @@ func main() {
 		PrintFindings(findings, strings.Fields(cveLevelsIgnoreList), strings.Fields(cveIgnoreList))
 
 		if junitPath != "" {
-			fmt.Printf("\nWriting junit report to: %s\n\n", junitPath)
+			fmt.Printf("\nWriting junit report to: %s\n", junitPath)
 			junitFile, err := os.OpenFile(junitPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
 			if err != nil {
 				return err
@@ -178,15 +178,15 @@ func main() {
 		}
 
 		if len(findings) > 0 && len(findings) > len(GetIgnoredFindings(findings, strings.Fields(cveLevelsIgnoreList), strings.Fields(cveIgnoreList))) {
-			return fmt.Errorf("There are CVEs found. Fix them first. Will not proceed with pushing %s:%s\n", destinationRepo, tag)
+			return fmt.Errorf("\nThere are CVEs found. Fix them first. Will not proceed with pushing %s:%s\n", destinationRepo, tag)
 		}
 
 		if skipPush {
-			fmt.Printf("Skip push to destination repo because of --skip-push flag or AWS_ECR_CLIENT_SKIP_PUSH env variable\n")
+			fmt.Printf("\nSkip push to destination repo because of --skip-push flag or AWS_ECR_CLIENT_SKIP_PUSH env variable\n")
 			return nil
 		}
 
-		fmt.Printf("\nPushing %s:%s\n\n", destinationRepo, tag)
+		fmt.Printf("\nPushing %s:%s\n", destinationRepo, tag)
 
 		_, err = Push(destinationRepo, tag)
 		if err != nil {
@@ -195,7 +195,7 @@ func main() {
 
 		additionalTagsList := strings.Fields(additionalTags)
 		if len(additionalTagsList) > 0 {
-			fmt.Printf("\nPushing additional tags: %s\n\n", strings.Join(additionalTagsList, ", "))
+			fmt.Printf("\nPushing additional tags: %s\n", strings.Join(additionalTagsList, ", "))
 			for _, additionalTag := range additionalTagsList {
 				err = Tag(destinationRepo+":"+tag, destinationRepo+":"+additionalTag)
 				if err != nil {
@@ -218,4 +218,5 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+	fmt.Printf("\nDone\n")
 }

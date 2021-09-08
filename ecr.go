@@ -168,7 +168,7 @@ func GetImageScanResults(client *ecr.Client, imageId ImageId, repo string) ([]ty
 		if err != nil {
 			return nil, err
 		}
-		fmt.Printf("Image scan status: %s\n", describeImageScanFindingsOutput.ImageScanStatus.Status)
+		fmt.Printf("\nImage scan status: %s\n", describeImageScanFindingsOutput.ImageScanStatus.Status)
 		if describeImageScanFindingsOutput.ImageScanStatus.Status != types.ScanStatusInProgress {
 			findings = describeImageScanFindingsOutput.ImageScanFindings.Findings
 			break
@@ -226,8 +226,8 @@ func PrintFindings(findings []types.ImageScanFinding, severityLevelsToIgnore []s
 	fmt.Print("Final scan result: ")
 
 	if len(findings) > len(ignoredFindings) {
-		fmt.Printf("Failed\n\n")
+		fmt.Printf("Failed\n")
 	} else {
-		fmt.Printf("Passed\n\n")
+		fmt.Printf("Passed\n")
 	}
 }

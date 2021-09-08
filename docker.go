@@ -23,7 +23,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io"
 
 	dockerTypes "github.com/docker/docker/api/types"
@@ -60,11 +59,6 @@ func imagePush(dockerClient *client.Client, authConfig dockerTypes.AuthConfig, r
 		return ImageId{}, err
 	}
 
-	err = printDockerDaemonJsonMessages(*buf, "docker-push")
-	if err != nil {
-		return ImageId{}, err
-	}
-
 	return getImageIdFromDockerDaemonJsonMessages(*buf)
 }
 
@@ -75,35 +69,6 @@ func imageTag(dockerClient *client.Client, imageId string, newImageId string) er
 		return err
 	}
 
-	return nil
-}
-
-func printDockerDaemonJsonMessages(message bytes.Buffer, prefix string) error {
-	decoder := json.NewDecoder(&message)
-	var previousMessage string
-	for {
-		var jsonMessage jsonmessage.JSONMessage
-		if err := decoder.Decode(&jsonMessage); err != nil {
-			if err == io.EOF {
-				break
-			}
-			return err
-		}
-		if err := jsonMessage.Error; err != nil {
-			return err
-		}
-		if jsonMessage.Status != "" {
-			// Messages could get quite repetative like - Pushing, Pushing, Pushing
-			// since we are not printig layer id being pushed
-			// so we use this trick to avoid creating noise in the logs
-			if jsonMessage.Status == previousMessage {
-				fmt.Print(".")
-			} else {
-				fmt.Printf("\n%s: %s\n", prefix, jsonMessage.Status)
-				previousMessage = jsonMessage.Status
-			}
-		}
-	}
 	return nil
 }
 
