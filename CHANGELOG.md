@@ -1,3 +1,8 @@
+### v0.3.0
+
+* Added possibility to write CVE scanning report in Junit format
+* Do not print docker push output to reduce noise
+
 ### v0.2.3
 
 * Remove timeout from Docker operations
