@@ -7,10 +7,12 @@ AWS ECR client for automated push to ECR and handling of vulnerability scanning 
 Features:
 * Automatically gets authorization token for ECR repo
 * Can push image to "scanning silo" ECR repo before pushing image to the actual repo (recommended)
-* Can push image only to "scanning sile" ECR repo and skip pushing image to the actual repo (useful for CI)
-* Can ignore all CVE's of certain level (not recommended but useful when you have to deal with docker image over which you have no control)
+* Can push image only to "scanning silo" ECR repo and skip pushing image to the actual repo (useful for CI)
+* Can ignore all CVE's of certain severity level (not recommended but useful when you have to deal with docker image over which you have no control)
 * Can ignore individual CVE's (not recommended but useful when you might really really need to unblock that pipeline)
 * Can output CVE scan report in Junit format so you can feed to to Jenkins or some other system for visibility
+
+See examples below for more details
 
 ## Usage
 
