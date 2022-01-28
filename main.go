@@ -21,6 +21,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -139,7 +140,8 @@ func main() {
 
 		repoName := GetRepoName(destinationRepo)
 		now := time.Now()
-		tagForScanning := repoName + "-" + tag + "-scan-" + fmt.Sprint(now.Unix())
+		dockerTagRe := regexp.MustCompile(`[^a-zA-Z0-9_.-]+`)
+		tagForScanning := dockerTagRe.ReplaceAllString(repoName + "-" + tag + "-scan-" + fmt.Sprint(now.Unix()), "")
 
 		fmt.Printf("\nFirst push image to scanning repo as %s:%s\n", stageRepo, tagForScanning)
 		err = Tag(destinationRepo+":"+tag, stageRepo+":"+tagForScanning)
