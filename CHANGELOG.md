@@ -1,3 +1,7 @@
+### v0.4.0
+
+* Fix for Bug:"/" inside repository name is automatically truncated
+
 ### v0.3.0
 
 * Added possibility to write CVE scanning report in Junit format
