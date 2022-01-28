@@ -148,7 +148,7 @@ func GetDockerAuthConfig(client *ecr.Client) (dockerTypes.AuthConfig, error) {
 
 func GetRepoName(registryName string) string {
 	repoSlised := strings.Split(string(registryName), "/")
-	return strings.Join(repoSlised[1:len(repoSlised)], "/")
+	return strings.Join(repoSlised[1:], "/")
 }
 
 // TODO: handle unsupported images like busybox or scratch that will fail the scan
