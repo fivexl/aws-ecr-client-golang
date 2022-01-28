@@ -19,7 +19,7 @@ See examples below for more details
 ```
 NAME:
    aws-ecr-client-linux-amd64 - AWS ECR client to automated push to ECR and handling of vulnerability.
-Version v0.3.0
+Version v0.4.0
 
 USAGE:
    aws-ecr-client-linux-amd64 [global options] command [command options] [arguments...]
