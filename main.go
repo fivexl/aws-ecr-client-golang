@@ -138,10 +138,15 @@ func main() {
 			stageRepo = destinationRepo
 		}
 
-		repoName := GetRepoName(destinationRepo)
+		repoName, err := GetRepoName(destinationRepo)
+		if err != nil {
+			return err
+		}
+
 		now := time.Now()
 		dockerTagRe := regexp.MustCompile(`[^a-zA-Z0-9_.-]+`)
-		tagForScanning := dockerTagRe.ReplaceAllString(repoName + "-" + tag + "-scan-" + fmt.Sprint(now.Unix()), "")
+		// Sanitize tag name and replace all unwanted symbols to -
+		tagForScanning := dockerTagRe.ReplaceAllString(repoName+"-"+tag+"-scan-"+fmt.Sprint(now.Unix()), "-")
 
 		fmt.Printf("\nFirst push image to scanning repo as %s:%s\n", stageRepo, tagForScanning)
 		err = Tag(destinationRepo+":"+tag, stageRepo+":"+tagForScanning)
