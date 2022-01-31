@@ -146,14 +146,26 @@ func GetDockerAuthConfig(client *ecr.Client) (dockerTypes.AuthConfig, error) {
 	}, nil
 }
 
-func GetRepoName(registryName string) string {
-	repoSlised := strings.Split(string(registryName), "/")
-	return repoSlised[len(repoSlised)-1]
+func GetRepoName(registryName string) (string, error) {
+	// We assume that the name is going to look like this
+	// XXXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/myrepo/name
+	// thus we can chop of a part based on assumption that it will contain
+	// .amazonaws.com/
+	divider := ".amazonaws.com/"
+	if strings.Contains(registryName, divider) {
+		repoSlised := strings.Split(string(registryName), divider)
+		return repoSlised[len(repoSlised)-1], nil
+	}
+	// if we got here than we got some unexpected string
+	return "", fmt.Errorf("Unexpected ECR registry name %s. Expected format XXXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/myrepo/name", registryName)
 }
 
 // TODO: handle unsupported images like busybox or scratch that will fail the scan
 func GetImageScanResults(client *ecr.Client, imageId ImageId, repo string) ([]types.ImageScanFinding, error) {
-	repoName := GetRepoName(repo)
+	repoName, err := GetRepoName(repo)
+	if err != nil {
+		return nil, err
+	}
 	input := ecr.DescribeImageScanFindingsInput{
 		ImageId: &types.ImageIdentifier{
 			ImageDigest: &imageId.digest,
