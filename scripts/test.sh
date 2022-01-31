@@ -54,7 +54,6 @@ create_repo ${REPO_NAME}/test
 REPO_URI=$(aws ecr describe-repositories --repository-names ${REPO_NAME}/test --query "repositories[0].repositoryUri" --output text)
 docker tag alpine@${IMAGE_DIGEST} ${REPO_URI}:${IMAGE_TAG}
 
-export AWS_ECR_CLIENT_IGNORE_CVE=CVE-2020-28928
 export AWS_ECR_CLIENT_DESTINATION_REPO=${REPO_URI}
 export AWS_ECR_CLIENT_IMAGE_TAG=${IMAGE_TAG}
 export AWS_ECR_CLIENT_JUNIT_REPORT_PATH=${REPORT_PATH}
