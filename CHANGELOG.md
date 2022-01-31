@@ -1,3 +1,8 @@
+### v0.4.0
+
+* Added proper handling of / in the name of ECR repository
+* Updated dependencies to address CVEs (containerd - GHSA-mvff-h3cj-wj9c, GHSA-5j5w-g665-5m35, GHSA-c2h3-6mxw-7mvq; opencontainers/image-spec - GHSA-77vh-xpmg-72qh)
+
 ### v0.3.0
 
 * Added possibility to write CVE scanning report in Junit format
