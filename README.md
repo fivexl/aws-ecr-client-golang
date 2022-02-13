@@ -130,3 +130,41 @@ Done
 	</testsuite>
 </testsuites>
 ```
+
+### Scratch images
+
+The client handles unsupported images error (for example scratch) as another finding and thus user has a chance to ignore it by
+ignoring `ECR_ERROR_UNSUPPORTED_IMAGE`
+
+```
+aws-ecr-client, version v0.5.0
+
+Note: Stage repo is not specified - will use destination repo as scanning silo
+
+First push image to scanning repo as XXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine:alpine-test-scratch-scan-1644784364
+
+Checking scan result for the image XXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine:alpine-test-scratch-scan-1644784364
+
+Image scan status: FAILED
+
+Found the following CVEs
++-----------------------------+---------------+------------------------------+--------------------------------+-----+
+|             CVE             |   SEVERITY    |           IGNORED?           |          DESCRIPTION           | URI |
++-----------------------------+---------------+------------------------------+--------------------------------+-----+
+| ECR_ERROR_UNSUPPORTED_IMAGE | INFORMATIONAL | Yes (ignored individual CVE) | UnsupportedImageError: The     |     |
+|                             |               |                              | operating system and/or        |     |
+|                             |               |                              | package manager are not        |     |
+|                             |               |                              | supported.                     |     |
++-----------------------------+---------------+------------------------------+--------------------------------+-----+
+
+Ignored CVE severity levels: 
+Ignored CVE's:               ECR_ERROR_UNSUPPORTED_IMAGE
+
+Final scan result: Passed
+
+Writing junit report to: /tmp/tmp.zYXzmPu3yM
+
+Pushing XXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine:test-scratch
+
+Pushing additional tags: latest
+```

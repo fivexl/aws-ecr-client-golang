@@ -38,6 +38,17 @@ docker pull alpine@${IMAGE_DIGEST}
 create_repo ${REPO_NAME}
 REPO_URI=$(aws ecr describe-repositories --repository-names ${REPO_NAME} --query "repositories[0].repositoryUri" --output text)
 
+# Test scratch image
+export SCRATCH_IMAGE_TAG=${IMAGE_TAG}-scratch
+docker pull resin/scratch
+docker tag resin/scratch ${REPO_URI}:${SCRATCH_IMAGE_TAG}
+export AWS_ECR_CLIENT_IGNORE_CVE="ECR_ERROR_UNSUPPORTED_IMAGE"
+export AWS_ECR_CLIENT_IGNORE_CVE_LEVEL=""
+export AWS_ECR_CLIENT_DESTINATION_REPO=${REPO_URI}
+export AWS_ECR_CLIENT_IMAGE_TAG=${SCRATCH_IMAGE_TAG}
+export AWS_ECR_CLIENT_JUNIT_REPORT_PATH=${REPORT_PATH}
+${EXECUTABLE}
+
 docker tag alpine@${IMAGE_DIGEST} ${REPO_URI}:${IMAGE_TAG}
 export AWS_ECR_CLIENT_IGNORE_CVE="CVE-2020-28928 CVE-2021-42374 CVE-2021-42375"
 export AWS_ECR_CLIENT_IGNORE_CVE_LEVEL="MEDIUM"
@@ -63,4 +74,11 @@ ${EXECUTABLE}
 # since there are CVEs in that image
 export AWS_ECR_CLIENT_IGNORE_CVE=""
 export AWS_ECR_CLIENT_IGNORE_CVE_LEVEL=""
+set +e
 ${EXECUTABLE}
+if [ "$?" == 0 ]; then
+    echo "this test should have failed. there are CVEs in the image"
+fi
+set -e
+
+echo "All good"

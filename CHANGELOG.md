@@ -1,3 +1,7 @@
+### v0.5.0
+
+* Gracefuly handle unsupported image error and let use ignore it
+
 ### v0.4.0
 
 * Added proper handling of / in the name of ECR repository
