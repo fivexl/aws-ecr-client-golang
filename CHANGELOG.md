@@ -1,3 +1,8 @@
+### v0.5.1
+
+* bug fix: repeated CVE levels in ignore configuration caused mistake in calculation of the number of ignored issues resulting in scan marked as passed when it actually failed
+* drop forgotten debug print out
+
 ### v0.5.0
 
 * Gracefuly handle unsupported image error and let use ignore it
