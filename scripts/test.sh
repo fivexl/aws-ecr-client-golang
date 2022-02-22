@@ -72,8 +72,21 @@ ${EXECUTABLE}
 
 # Test that script fails if we do not ignore CVEs
 # since there are CVEs in that image
-export AWS_ECR_CLIENT_IGNORE_CVE=""
-export AWS_ECR_CLIENT_IGNORE_CVE_LEVEL=""
+export AWS_ECR_CLIENT_IGNORE_CVE="CVE-2021-42386"
+export AWS_ECR_CLIENT_IGNORE_CVE_LEVEL="LOW"
+set +e
+${EXECUTABLE}
+if [ "$?" == 0 ]; then
+    echo "this test should have failed. there are CVEs in the image"
+fi
+set -e
+
+# Test that script fails if there are repeated CVE ids or levels
+# We used to have a bug (fixed in 0.5.1) that caused to scan result to be set
+# to passed when user repeared the same levels twice and we didn't account for that
+# resulting in number of ignored CVEs being higher than total number of CVEs reported :facepalm:
+export AWS_ECR_CLIENT_IGNORE_CVE="CVE-2020-28928 CVE-2020-28928 CVE-2020-28928 CVE-2020-28928 CVE-2020-28928 CVE-2020-28928 CVE-2020-28928"
+export AWS_ECR_CLIENT_IGNORE_CVE_LEVEL="MEDIUM MEDIUM MEDIUM"
 set +e
 ${EXECUTABLE}
 if [ "$?" == 0 ]; then

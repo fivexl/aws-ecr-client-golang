@@ -37,8 +37,8 @@ func main() {
 	var additionalTags string
 	var stageRepo string
 	var destinationRepo string
-	var cveLevelsIgnoreList string
-	var cveIgnoreList string
+	var cveLevelsIgnoreListString string
+	var cveIgnoreListString string
 	var junitPath string
 	var skipPush bool
 
@@ -86,7 +86,7 @@ func main() {
 				DefaultText: "empty string",
 				Usage:       "Space-separated list of CVE severity levels to ignore. Valid severity levels are: " + GetFindingSeverityLevelsAsString(),
 				EnvVars:     []string{"AWS_ECR_CLIENT_IGNORE_CVE_LEVEL"},
-				Destination: &cveLevelsIgnoreList,
+				Destination: &cveLevelsIgnoreListString,
 			},
 			&cli.StringFlag{
 				Name:        "ignore-cve",
@@ -95,7 +95,7 @@ func main() {
 				DefaultText: "empty string",
 				Usage:       "Space-separated list of individual CVE's to ignore.",
 				EnvVars:     []string{"AWS_ECR_CLIENT_IGNORE_CVE"},
-				Destination: &cveIgnoreList,
+				Destination: &cveIgnoreListString,
 			},
 			&cli.StringFlag{
 				Name:        "junit-report-path",
@@ -128,10 +128,13 @@ func main() {
 
 		fmt.Printf("\naws-ecr-client, version %s\n", VERSION)
 
-		_, err := AreSeverityLevelsValid(cveLevelsIgnoreList)
+		_, err := AreSeverityLevelsValid(cveLevelsIgnoreListString)
 		if err != nil {
 			return err
 		}
+
+		cveLevelsIgnoreList := dedupList(strings.Fields(cveLevelsIgnoreListString))
+		cveIgnoreList := dedupList(strings.Fields(cveIgnoreListString))
 
 		if stageRepo == "" {
 			fmt.Printf("\nNote: Stage repo is not specified - will use destination repo as scanning silo\n")
@@ -169,7 +172,7 @@ func main() {
 			return err
 		}
 
-		PrintFindings(findings, strings.Fields(cveLevelsIgnoreList), strings.Fields(cveIgnoreList))
+		PrintFindings(findings, cveLevelsIgnoreList, cveIgnoreList)
 
 		if junitPath != "" {
 			fmt.Printf("\nWriting junit report to: %s\n", junitPath)
@@ -184,7 +187,7 @@ func main() {
 			}
 		}
 
-		if len(findings) > 0 && len(findings) > len(GetIgnoredFindings(findings, strings.Fields(cveLevelsIgnoreList), strings.Fields(cveIgnoreList))) {
+		if len(findings) > 0 && len(findings) > len(GetIgnoredFindings(findings, cveLevelsIgnoreList, cveIgnoreList)) {
 			return fmt.Errorf("\nThere are CVEs found. Fix them first. Will not proceed with pushing %s:%s\n", destinationRepo, tag)
 		}
 

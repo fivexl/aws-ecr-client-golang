@@ -67,18 +67,31 @@ func GetIgnoredFindings(findings []types.ImageScanFinding, severityLevelsToIgnor
 	result := []types.ImageScanFinding{}
 
 	for _, finding := range findings {
-		for _, severityLevel := range severityLevelsToIgnore {
-			if string(finding.Severity) == severityLevel {
-				result = append(result, finding)
-			}
-		}
-		for _, cve := range cveToIgnore {
-			if finding.Name != nil && string(*finding.Name) == cve {
-				result = append(result, finding)
-			}
+		if isIgnored, _ := IsFindingIgnored(finding, severityLevelsToIgnore, cveToIgnore); isIgnored {
+			result = append(result, finding)
 		}
 	}
+
+	// A little bit of self check
+	if len(findings) < len(result) {
+		panic("Somehow number of ignored findings is more than total number of findings and it indicates internal logic error. Please report to mantainers")
+	}
+
 	return result
+}
+
+func IsFindingIgnored(finding types.ImageScanFinding, severityLevelsToIgnore []string, cveToIgnore []string) (bool, string) {
+	for _, severityLevel := range severityLevelsToIgnore {
+		if string(finding.Severity) == severityLevel {
+			return true, "Ignored severyity level"
+		}
+	}
+	for _, cve := range cveToIgnore {
+		if finding.Name != nil && string(*finding.Name) == cve {
+			return true, "Ignored individual CVE"
+		}
+	}
+	return false, ""
 }
 
 // TODO: is there a better way?
@@ -237,19 +250,10 @@ func PrintFindings(findings []types.ImageScanFinding, severityLevelsToIgnore []s
 		if finding.Uri != nil {
 			uri = *finding.Uri
 		}
-		for _, severityLevel := range severityLevelsToIgnore {
-			if string(finding.Severity) == severityLevel {
-				ignoredFindings = append(ignoredFindings, finding)
-				ignored = "Yes (ignored severity level " + severityLevel + ")"
-			}
+		if isIgnored, reason := IsFindingIgnored(finding, severityLevelsToIgnore, cveToIgnore); isIgnored {
+			ignoredFindings = append(ignoredFindings, finding)
+			ignored = fmt.Sprintf("Yes (%s)", reason)
 		}
-		for _, cve := range cveToIgnore {
-			if string(name) == cve {
-				ignoredFindings = append(ignoredFindings, finding)
-				ignored = "Yes (ignored individual CVE)"
-			}
-		}
-
 		table.Append([]string{name, string(finding.Severity), ignored, description, uri})
 	}
 
