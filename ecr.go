@@ -190,7 +190,6 @@ func GetImageScanResults(client *ecr.Client, imageId ImageId, repo string) ([]ty
 		}
 		// Happy case
 		if describeImageScanFindingsOutput.ImageScanStatus.Status == types.ScanStatusComplete {
-			fmt.Printf("%v", describeImageScanFindingsOutput)
 			findings = describeImageScanFindingsOutput.ImageScanFindings.Findings
 			break
 		}
