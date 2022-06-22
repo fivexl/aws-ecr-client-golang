@@ -175,7 +175,7 @@ func GetRepoName(registryName string) (string, error) {
 }
 
 // TODO: handle unsupported images like busybox or scratch that will fail the scan
-func GetImageScanResults(client *ecr.Client, imageId ImageId, repo string) ([]types.ImageScanFinding, error) {
+func GetImageScanResults(client *ecr.Client, imageId ImageId, repo string, timeout time.Duration) ([]types.ImageScanFinding, error) {
 	repoName, err := GetRepoName(repo)
 	if err != nil {
 		return nil, err
@@ -191,7 +191,7 @@ func GetImageScanResults(client *ecr.Client, imageId ImageId, repo string) ([]ty
 	var findings []types.ImageScanFinding
 
 	w := ecr.NewImageScanCompleteWaiter(client)
-	output, err := w.WaitForOutput(context.TODO(), &input, 1*time.Hour)
+	output, err := w.WaitForOutput(context.TODO(), &input, timeout)
 	if err != nil {
 		return nil, err
 	}
