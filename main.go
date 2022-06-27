@@ -40,6 +40,7 @@ func main() {
 	var cveLevelsIgnoreListString string
 	var cveIgnoreListString string
 	var junitPath string
+	var scanWaitTimeout int
 	var skipPush bool
 
 	app := &cli.App{
@@ -106,6 +107,14 @@ func main() {
 				EnvVars:     []string{"AWS_ECR_CLIENT_JUNIT_REPORT_PATH"},
 				Destination: &junitPath,
 			},
+			&cli.IntFlag{
+				Name:        "scan-wait-timeout",
+				Value:       20,
+				DefaultText: "20",
+				Usage:       "The max duration (in minutes) to wait for the image scan to complete. If exceeded, the operation will fail and the tag will not be pushed.",
+				EnvVars:     []string{"AWS_ECR_CLIENT_SCAN_WAIT_TIMEOUT"},
+				Destination: &scanWaitTimeout,
+			},
 			&cli.BoolFlag{
 				Name:        "skip-push",
 				Aliases:     []string{"p"},
@@ -121,7 +130,7 @@ func main() {
 	cli.AppHelpTemplate = fmt.Sprintf(`%s
 
 	Find source code, usage examples, report issues, get support: https://github.com/fivexl/aws-ecr-client-golang
-	
+
 	`, cli.AppHelpTemplate)
 
 	app.Action = func(c *cli.Context) error {
@@ -167,7 +176,8 @@ func main() {
 		if err != nil {
 			return err
 		}
-		findings, err := GetImageScanResults(client, imageId, stageRepo)
+		timeout := time.Duration(scanWaitTimeout) * time.Minute
+		findings, err := GetImageScanResults(client, imageId, stageRepo, timeout)
 		if err != nil {
 			return err
 		}
