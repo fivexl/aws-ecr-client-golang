@@ -1,3 +1,7 @@
+### v0.5.2
+
+*  bug fix: Use WaitForOutput to wait and retry ECR requests by @legal90 in https://github.com/fivexl/aws-ecr-client-golang/pull/15
+
 ### v0.5.1
 
 * bug fix: repeated CVE levels in ignore configuration caused mistake in calculation of the number of ignored issues resulting in scan marked as passed when it actually failed
