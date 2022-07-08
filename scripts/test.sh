@@ -15,6 +15,7 @@ IMAGE_TAG=test
 IMAGE_DIGEST=sha256:2582893dec6f12fd499d3a709477f2c0c0c1dfcd28024c93f1f0626b9e3540c8
 REPORT_PATH=$(mktemp)
 TOP=$(git rev-parse --show-toplevel)
+MACHINE_ARCH=$(arch)
 BUILD_DIR=${TOP}/build
 
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
@@ -23,7 +24,7 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
     OS=darwin
 fi
 
-if [[ "$(arch)" == "x86_64" ]]; then
+if [[ "$MACHINE_ARCH" == "x86_64" || "$MACHINE_ARCH" == "i386" ]]; then
     ARCH=amd64
 else
     ARCH=arm
