@@ -193,23 +193,27 @@ func GetImageScanResults(client *ecr.Client, imageId ImageId, repo string, timeo
 	w := ecr.NewImageScanCompleteWaiter(client)
 	output, err := w.WaitForOutput(context.TODO(), &input, timeout)
 	if err != nil {
+		// Handle unsupported images.
+		// In that case, by some reason, DescribeImageScanFindings returns `ScanStatusFailed`
+		// instead of `ScanStatusUnsupportedImage`. That casues WaitForOutput to return the error.
+		// So here we have to check the status description for "UnsupportedImageError" separately.
+		failedOutput, err := client.DescribeImageScanFindings(context.TODO(), &input)
+		if err != nil {
+			return nil, err
+		}
+		if failedOutput.ImageScanStatus.Status == types.ScanStatusFailed &&
+			strings.Contains(*failedOutput.ImageScanStatus.Description, "UnsupportedImageError") {
+			findings = []types.ImageScanFinding{{
+				Name:        aws.String("ECR_ERROR_UNSUPPORTED_IMAGE"),
+				Description: failedOutput.ImageScanStatus.Description,
+				Severity:    types.FindingSeverityInformational}}
+			return findings, nil
+		}
+
 		return nil, err
 	}
 	fmt.Printf("\nImage scan status: %s\n", output.ImageScanStatus.Status)
 	findings = output.ImageScanFindings.Findings
-
-	// Handle unsupported images
-	// For some reason ECR returns status failed instead of types.ScanStatusUnsupportedImage
-	// So we have to check error message for UnsupportedImageError
-	// Unfortunately they can change output any time so this is a very shaky way to do it
-	// Do not really see any other option at the moment
-	if output.ImageScanStatus.Status == types.ScanStatusFailed &&
-		strings.Contains(*output.ImageScanStatus.Description, "UnsupportedImageError") {
-		findings = []types.ImageScanFinding{{
-			Name:        aws.String("ECR_ERROR_UNSUPPORTED_IMAGE"),
-			Description: output.ImageScanStatus.Description,
-			Severity:    types.FindingSeverityInformational}}
-	}
 
 	return findings, nil
 }
