@@ -26,7 +26,6 @@ import (
 	"io"
 
 	dockerTypes "github.com/docker/docker/api/types"
-	"github.com/docker/docker/client"
 	dockerClient "github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/jsonmessage"
 )
@@ -40,14 +39,14 @@ func getDockerClient() (*dockerClient.Client, error) {
 	return dockerClient.NewClientWithOpts(dockerClient.FromEnv, dockerClient.WithAPIVersionNegotiation())
 }
 
-func imagePush(dockerClient *client.Client, authConfig dockerTypes.AuthConfig, repo string, tag string) (ImageId, error) {
+func imagePush(client *dockerClient.Client, authConfig dockerTypes.AuthConfig, repo string, tag string) (ImageId, error) {
 
 	authConfigBytes, _ := json.Marshal(authConfig)
 	authConfigEncoded := base64.URLEncoding.EncodeToString(authConfigBytes)
 
 	target := repo + ":" + tag
 	opts := dockerTypes.ImagePushOptions{RegistryAuth: authConfigEncoded}
-	rd, err := dockerClient.ImagePush(context.Background(), target, opts)
+	rd, err := client.ImagePush(context.Background(), target, opts)
 	if err != nil {
 		return ImageId{}, err
 	}
@@ -62,9 +61,9 @@ func imagePush(dockerClient *client.Client, authConfig dockerTypes.AuthConfig, r
 	return getImageIdFromDockerDaemonJsonMessages(*buf)
 }
 
-func imageTag(dockerClient *client.Client, imageId string, newImageId string) error {
+func imageTag(client *dockerClient.Client, imageId string, newImageId string) error {
 
-	err := dockerClient.ImageTag(context.Background(), imageId, newImageId)
+	err := client.ImageTag(context.Background(), imageId, newImageId)
 	if err != nil {
 		return err
 	}
