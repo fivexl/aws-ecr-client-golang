@@ -44,7 +44,7 @@ GLOBAL OPTIONS:
 
 ## Releases
 
-Download official builds from [here](https://releases.fivexl.io/aws-ecr-client-golang/)
+Download official builds from [here](https://releases.fivexl.io/aws-ecr-client-golang/index.html)
 
 ## Examples
 
@@ -68,8 +68,8 @@ Found the following CVEs
 | CVE-2020-28928 | LOW      | No       |             | https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-28928 |
 +----------------+----------+----------+-------------+---------------------------------------------------------------+
 
-Ignored CVE severity levels: 
-Ignored CVE's:               
+Ignored CVE severity levels:
+Ignored CVE's:
 
 Final scan result: Failed
 
@@ -96,7 +96,7 @@ Found the following CVEs
 | CVE-2020-28928 | LOW      | Yes (ignored individual CVE) |             | https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-28928 |
 +----------------+----------+------------------------------+-------------+---------------------------------------------------------------+
 
-Ignored CVE severity levels: 
+Ignored CVE severity levels:
 Ignored CVE's:               CVE-2020-28928
 
 Final scan result: Passed
@@ -157,7 +157,7 @@ Found the following CVEs
 |                             |               |                              | supported.                     |     |
 +-----------------------------+---------------+------------------------------+--------------------------------+-----+
 
-Ignored CVE severity levels: 
+Ignored CVE severity levels:
 Ignored CVE's:               ECR_ERROR_UNSUPPORTED_IMAGE
 
 Final scan result: Passed
