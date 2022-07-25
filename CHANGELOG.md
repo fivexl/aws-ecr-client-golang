@@ -1,6 +1,11 @@
+### v0.5.3
+
+* Fix handling the UnsupportedImageError, https://github.com/fivexl/aws-ecr-client-golang/pull/16
+* Update dependencies, https://github.com/fivexl/aws-ecr-client-golang/pull/17
+
 ### v0.5.2
 
-*  bug fix: Use WaitForOutput to wait and retry ECR requests by @legal90 in https://github.com/fivexl/aws-ecr-client-golang/pull/15
+* bug fix: Use WaitForOutput to wait and retry ECR requests by @legal90 in https://github.com/fivexl/aws-ecr-client-golang/pull/15
 
 ### v0.5.1
 
