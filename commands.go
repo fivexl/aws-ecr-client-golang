@@ -18,7 +18,7 @@ limitations under the License.
 
 package main
 
-func Push(destinationRepo string, tag string) (ImageId, error) {
+func Push(imageRef string) (ImageId, error) {
 	client, err := GetECRClient()
 	if err != nil {
 		return ImageId{}, err
@@ -34,7 +34,7 @@ func Push(destinationRepo string, tag string) (ImageId, error) {
 		return ImageId{}, err
 	}
 
-	return imagePush(cli, authConfig, destinationRepo, tag)
+	return imagePush(cli, authConfig, imageRef)
 }
 
 func Tag(imageId string, newImageId string) error {

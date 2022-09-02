@@ -30,6 +30,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	"github.com/aws/aws-sdk-go-v2/service/ecr/types"
+	"github.com/distribution/distribution/reference"
 	dockerTypes "github.com/docker/docker/api/types"
 	"github.com/olekukonko/tablewriter"
 )
@@ -137,7 +138,7 @@ func GetDockerAuthConfig(client *ecr.Client) (dockerTypes.AuthConfig, error) {
 	}
 	// TODO: find token for the correct repo based on its url
 	if len(authTokens) != 1 {
-		return dockerTypes.AuthConfig{}, fmt.Errorf("Received %d auth tokens but expected one. Not sure what to do", len(authTokens))
+		return dockerTypes.AuthConfig{}, fmt.Errorf("received %d auth tokens but expected one. Not sure what to do", len(authTokens))
 	}
 	// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/ecr/types#AuthorizationData
 	// AuthorizationToken *string
@@ -150,7 +151,7 @@ func GetDockerAuthConfig(client *ecr.Client) (dockerTypes.AuthConfig, error) {
 	}
 	usernamePassword := strings.Split(string(decodedToken), ":")
 	if len(usernamePassword) != 2 {
-		return dockerTypes.AuthConfig{}, fmt.Errorf("Received %s as auth token but expected username:password", string(decodedToken))
+		return dockerTypes.AuthConfig{}, fmt.Errorf("received %s as auth token but expected username:password", string(decodedToken))
 	}
 
 	return dockerTypes.AuthConfig{
@@ -160,32 +161,24 @@ func GetDockerAuthConfig(client *ecr.Client) (dockerTypes.AuthConfig, error) {
 	}, nil
 }
 
-func GetRepoName(registryName string) (string, error) {
-	// We assume that the name is going to look like this
-	// XXXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/myrepo/name
-	// thus we can chop of a part based on assumption that it will contain
-	// .amazonaws.com/
-	divider := ".amazonaws.com/"
-	if strings.Contains(registryName, divider) {
-		repoSlised := strings.Split(string(registryName), divider)
-		return repoSlised[len(repoSlised)-1], nil
-	}
-	// if we got here than we got some unexpected string
-	return "", fmt.Errorf("Unexpected ECR registry name %s. Expected format XXXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/myrepo/name", registryName)
-}
-
-// TODO: handle unsupported images like busybox or scratch that will fail the scan
-func GetImageScanResults(client *ecr.Client, imageId ImageId, repo string, timeout time.Duration) ([]types.ImageScanFinding, error) {
-	repoName, err := GetRepoName(repo)
+func GetECRRepo(registryName string) (reference.Named, error) {
+	reg, err := reference.ParseNamed(registryName)
 	if err != nil {
 		return nil, err
 	}
+	if !strings.Contains(reference.Domain(reg), "amazonaws.com") {
+		return nil, fmt.Errorf("unexpected ECR registry name %s. Expected format: AWS_ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/myrepo/name", registryName)
+	}
+	return reg, nil
+}
+
+func GetImageScanResults(client *ecr.Client, imageId ImageId, ecrRepoName string, timeout time.Duration) ([]types.ImageScanFinding, error) {
 	input := ecr.DescribeImageScanFindingsInput{
 		ImageId: &types.ImageIdentifier{
 			ImageDigest: &imageId.digest,
 			ImageTag:    &imageId.tag,
 		},
-		RepositoryName: &repoName,
+		RepositoryName: &ecrRepoName,
 	}
 
 	var findings []types.ImageScanFinding
