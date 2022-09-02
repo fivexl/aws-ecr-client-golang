@@ -39,14 +39,13 @@ func getDockerClient() (*dockerClient.Client, error) {
 	return dockerClient.NewClientWithOpts(dockerClient.FromEnv, dockerClient.WithAPIVersionNegotiation())
 }
 
-func imagePush(client *dockerClient.Client, authConfig dockerTypes.AuthConfig, repo string, tag string) (ImageId, error) {
+func imagePush(client *dockerClient.Client, authConfig dockerTypes.AuthConfig, imageRef string) (ImageId, error) {
 
 	authConfigBytes, _ := json.Marshal(authConfig)
 	authConfigEncoded := base64.URLEncoding.EncodeToString(authConfigBytes)
 
-	target := repo + ":" + tag
 	opts := dockerTypes.ImagePushOptions{RegistryAuth: authConfigEncoded}
-	rd, err := client.ImagePush(context.Background(), target, opts)
+	rd, err := client.ImagePush(context.Background(), imageRef, opts)
 	if err != nil {
 		return ImageId{}, err
 	}

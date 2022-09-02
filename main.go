@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/distribution/distribution/reference"
 	"github.com/urfave/cli/v2"
 )
 
@@ -33,10 +34,8 @@ var VERSION string
 
 func main() {
 
-	var tag string
-	var additionalTags string
 	var stageRepo string
-	var destinationRepo string
+	var images string
 	var cveLevelsIgnoreListString string
 	var cveIgnoreListString string
 	var junitPath string
@@ -47,29 +46,12 @@ func main() {
 		Usage: "AWS ECR client to automated push to ECR and handling of vulnerability.\nVersion " + VERSION,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:        "destination-repo",
-				Aliases:     []string{"d"},
-				Usage:       "Final destination of the image",
-				EnvVars:     []string{"AWS_ECR_CLIENT_DESTINATION_REPO"},
-				Destination: &destinationRepo,
+				Name:        "images",
+				Aliases:     []string{"i"},
+				Usage:       "Space-separated list of full image references to push.",
+				EnvVars:     []string{"AWS_ECR_CLIENT_IMAGES"},
+				Destination: &images,
 				Required:    true,
-			},
-			&cli.StringFlag{
-				Name:        "tag",
-				Aliases:     []string{"t"},
-				Usage:       "Image tag to push. Tag should already exist.",
-				EnvVars:     []string{"AWS_ECR_CLIENT_IMAGE_TAG"},
-				Destination: &tag,
-				Required:    true,
-			},
-			&cli.StringFlag{
-				Name:        "additional-tags",
-				Aliases:     []string{"a"},
-				Value:       "latest",
-				DefaultText: "latest",
-				Usage:       "Space-separated list of tags to add to the image and push.",
-				EnvVars:     []string{"AWS_ECR_CLIENT_ADDITIONAL_TAGS"},
-				Destination: &additionalTags,
 			},
 			&cli.StringFlag{
 				Name:        "stage-repo",
@@ -135,7 +117,7 @@ func main() {
 
 	app.Action = func(c *cli.Context) error {
 
-		fmt.Printf("\naws-ecr-client, version %s\n", VERSION)
+		fmt.Printf("aws-ecr-client, version %s\n", VERSION)
 
 		_, err := AreSeverityLevelsValid(cveLevelsIgnoreListString)
 		if err != nil {
@@ -144,13 +126,18 @@ func main() {
 
 		cveLevelsIgnoreList := dedupList(strings.Fields(cveLevelsIgnoreListString))
 		cveIgnoreList := dedupList(strings.Fields(cveIgnoreListString))
+		imageList := dedupList(strings.Fields(images))
+
+		// -----------------------------------
+		// Push to STAGE repo
+		// -----------------------------------
 
 		if stageRepo == "" {
-			fmt.Printf("\nNote: Stage repo is not specified - will use destination repo as scanning silo\n")
-			stageRepo = destinationRepo
+			fmt.Println("Note: Stage repo is not specified - will use the the repo of the first given image as a scanning silo")
+			stageRepo = imageList[0]
 		}
 
-		repoName, err := GetRepoName(destinationRepo)
+		stageRepoNamed, err := GetECRRepo(stageRepo)
 		if err != nil {
 			return err
 		}
@@ -158,26 +145,30 @@ func main() {
 		now := time.Now()
 		dockerTagRe := regexp.MustCompile(`[^a-zA-Z0-9_.-]+`)
 		// Sanitize tag name and replace all unwanted symbols to -
-		tagForScanning := dockerTagRe.ReplaceAllString(repoName+"-"+tag+"-scan-"+fmt.Sprint(now.Unix()), "-")
-
-		fmt.Printf("\nFirst push image to scanning repo as %s:%s\n", stageRepo, tagForScanning)
-		err = Tag(destinationRepo+":"+tag, stageRepo+":"+tagForScanning)
+		tagForScanning := dockerTagRe.ReplaceAllString("ecs-client-scan-"+fmt.Sprint(now.Unix()), "-")
+		stageImageRef, err := reference.WithTag(stageRepoNamed, tagForScanning)
 		if err != nil {
 			return err
 		}
 
-		imageId, err := Push(stageRepo, tagForScanning)
+		fmt.Printf("Push image to the scanning repo as %s\n", stageImageRef.String())
+		if err = Tag(imageList[0], stageImageRef.String()); err != nil {
+			return err
+		}
+		imageId, err := Push(stageImageRef.String())
 		if err != nil {
 			return err
 		}
 
-		fmt.Printf("\nChecking scan result for the image %s:%s\n", stageRepo, tagForScanning)
+		fmt.Printf("Checking scan result for the image %s\n", stageImageRef.String())
 		client, err := GetECRClient()
 		if err != nil {
 			return err
 		}
+		// Get the ECR repo name without the domain part, like: `some/repo/name`
+		stageRepoPath := reference.Path(stageRepoNamed)
 		timeout := time.Duration(scanWaitTimeout) * time.Minute
-		findings, err := GetImageScanResults(client, imageId, stageRepo, timeout)
+		findings, err := GetImageScanResults(client, imageId, stageRepoPath, timeout)
 		if err != nil {
 			return err
 		}
@@ -185,7 +176,7 @@ func main() {
 		PrintFindings(findings, cveLevelsIgnoreList, cveIgnoreList)
 
 		if junitPath != "" {
-			fmt.Printf("\nWriting junit report to: %s\n", junitPath)
+			fmt.Printf("Writing junit report to: %s\n", junitPath)
 			junitFile, err := os.OpenFile(junitPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
 			if err != nil {
 				return err
@@ -198,35 +189,19 @@ func main() {
 		}
 
 		if len(findings) > 0 && len(findings) > len(GetIgnoredFindings(findings, cveLevelsIgnoreList, cveIgnoreList)) {
-			return fmt.Errorf("\nThere are CVEs found. Fix them first. Will not proceed with pushing %s:%s\n", destinationRepo, tag)
+			return fmt.Errorf("there are CVEs found! Please, fix them first. Will not proceed with pushing to the destination registries")
 		}
 
 		if skipPush {
-			fmt.Printf("\nSkip push to destination repo because of --skip-push flag or AWS_ECR_CLIENT_SKIP_PUSH env variable\n")
+			fmt.Printf("Skip push to destination repo because of --skip-push flag or AWS_ECR_CLIENT_SKIP_PUSH env variable\n")
 			return nil
 		}
 
-		fmt.Printf("\nPushing %s:%s\n", destinationRepo, tag)
-
-		_, err = Push(destinationRepo, tag)
-		if err != nil {
-			return err
-		}
-
-		additionalTagsList := strings.Fields(additionalTags)
-		if len(additionalTagsList) > 0 {
-			fmt.Printf("\nPushing additional tags: %s\n", strings.Join(additionalTagsList, ", "))
-			for _, additionalTag := range additionalTagsList {
-				err = Tag(destinationRepo+":"+tag, destinationRepo+":"+additionalTag)
-				if err != nil {
-					return err
-				}
-
-				_, err = Push(destinationRepo, additionalTag)
-				if err != nil {
-					return err
-				}
-				fmt.Printf("\n")
+		for _, ref := range imageList {
+			fmt.Printf("Pushing: %s\n", ref)
+			_, err = Push(ref)
+			if err != nil {
+				return err
 			}
 		}
 
@@ -235,8 +210,8 @@ func main() {
 
 	err := app.Run(os.Args)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("Error: %v", err)
 		os.Exit(1)
 	}
-	fmt.Printf("\nDone\n")
+	fmt.Println("Done")
 }
