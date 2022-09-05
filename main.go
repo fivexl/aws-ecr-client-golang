@@ -54,12 +54,12 @@ func main() {
 				Required:    true,
 			},
 			&cli.StringFlag{
-				Name:        "stage-repo",
+				Name:        "stage-ecr-repo",
 				Aliases:     []string{"s"},
 				Value:       "",
 				DefaultText: "empty string",
-				Usage:       "Repository where image will be sent for scanning before pushing it to destination repo with the tag <destination-repo-name>-<tag>-scan-<timestamp>. Will push directly to destination repo with the specified tag if no value provided",
-				EnvVars:     []string{"AWS_ECR_CLIENT_STAGE_REPO"},
+				Usage:       "AWS ECR Repository where the image will be sent for scanning before pushing it to destination repo with the tag ecs-client-scan-<timestamp>. If omitted, then the repo of the first wiven image will be used.",
+				EnvVars:     []string{"AWS_ECR_CLIENT_STAGE_ECR_REPO"},
 				Destination: &stageRepo,
 			},
 			&cli.StringFlag{
