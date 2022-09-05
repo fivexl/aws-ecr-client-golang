@@ -18,25 +18,24 @@ See examples below for more details
 
 ```
 NAME:
-   aws-ecr-client-linux-amd64 - AWS ECR client to automated push to ECR and handling of vulnerability.
-Version v0.4.0
+   aws-ecr-client-golang - AWS ECR client to automated push to ECR and handling of vulnerability.
+                           Version v0.6.0
 
 USAGE:
-   aws-ecr-client-linux-amd64 [global options] command [command options] [arguments...]
+   aws-ecr-client-golang [global options] command [command options] [arguments...]
 
 COMMANDS:
    help, h  Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:
-   --destination-repo value, -d value   Final destination of the image [$AWS_ECR_CLIENT_DESTINATION_REPO]
-   --tag value, -t value                Image tag to push. Tag should already exist. [$AWS_ECR_CLIENT_IMAGE_TAG]
-   --additional-tags value, -a value    Space-separated list of tags to add to the image and push. (default: latest) [$AWS_ECR_CLIENT_ADDITIONAL_TAGS]
-   --stage-repo value, -s value         Repository where image will be sent for scanning before pushing it to destination repo with the tag <destination-repo-name>-<tag>-scan-<timestamp>. Will push directly to destination repo with the specified tag if no value provided (default: empty string) [$AWS_ECR_CLIENT_STAGE_REPO]
-   --ignore-levels value, -l value      Space-separated list of CVE severity levels to ignore. Valid severity levels are: CRITICAL, HIGH, MEDIUM, LOW, INFORMATIONAL, UNDEFINED (default: empty string) [$AWS_ECR_CLIENT_IGNORE_CVE_LEVEL]
-   --ignore-cve value, -c value         Space-separated list of individual CVE's to ignore. (default: empty string) [$AWS_ECR_CLIENT_IGNORE_CVE]
-   --junit-report-path value, -j value  If set then CVE scan result will be written in JUNIT format to the path provided as a value. Useful for CI (like Jenkins) to keep ignored CVE visible [$AWS_ECR_CLIENT_JUNIT_REPORT_PATH]
-   --skip-push, -p                      Only push to scanning silo and do not push to destination repo even if there are no CVE's (useful for CI). (default: false) [$AWS_ECR_CLIENT_SKIP_PUSH]
    --help, -h                           show help (default: false)
+   --ignore-cve value, -c value         Space-separated list of individual CVE's to ignore. (default: empty string) [$AWS_ECR_CLIENT_IGNORE_CVE]
+   --ignore-levels value, -l value      Space-separated list of CVE severity levels to ignore. Valid severity levels are: CRITICAL, HIGH, MEDIUM, LOW, INFORMATIONAL, UNDEFINED (default: empty string) [$AWS_ECR_CLIENT_IGNORE_CVE_LEVEL]
+   --images value, -i value             Space-separated list of full image references to push. [$AWS_ECR_CLIENT_IMAGES]
+   --junit-report-path value, -j value  If set then CVE scan result will be written in JUNIT format to the path provided as a value. Useful for CI (like Jenkins) to keep ignored CVE visible [$AWS_ECR_CLIENT_JUNIT_REPORT_PATH]
+   --scan-wait-timeout value            The max duration (in minutes) to wait for the image scan to complete. If exceeded, the operation will fail and the tag will not be pushed. (default: 20) [$AWS_ECR_CLIENT_SCAN_WAIT_TIMEOUT]
+   --skip-push, -p                      Only push to scanning silo and do not push to destination repo even if there are no CVE's (useful for CI). (default: false) [$AWS_ECR_CLIENT_SKIP_PUSH]
+   --stage-repo value, -s value         Repository where image will be sent for scanning before pushing it to destination repo with the tag <destination-repo-name>-<tag>-scan-<timestamp>. Will push directly to destination repo with the specified tag if no value provided (default: empty string) [$AWS_ECR_CLIENT_STAGE_REPO]
 
 
   Find source code, usage examples, report issues, get support: https://github.com/fivexl/aws-ecr-client-golang
@@ -51,62 +50,52 @@ Download official builds from [here](https://releases.fivexl.io/aws-ecr-client-g
 ### Push of the real tag is stopped because of CVE
 
 ```
-$ aws-ecr-client -d XXXXXXXXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine -t test
-
-Note: Stage repo is not specified - will use destination repo as scanning silo
-
-First push image to scanning repo XXXXXXXXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine with the tag alpine-test-scan-1627040431
-
-Checking scan result for the image XXXXXXXXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine:alpine-test-scan-1627040431
+$ aws-ecr-client-golang --images XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:3.12.12
+aws-ecr-client, version v0.6.0
+Note: Stage repo is not specified - will use the the repo of the first given image as a scanning silo
+Push image to the scanning repo as XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:ecs-client-scan-1662393883
+Checking scan result for the image XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:ecs-client-scan-1662393883
 
 Image scan status: COMPLETE
 
 Found the following CVEs
-+----------------+----------+----------+-------------+---------------------------------------------------------------+
-|      CVE       | SEVERITY | IGNORED? | DESCRIPTION |                              URI                              |
-+----------------+----------+----------+-------------+---------------------------------------------------------------+
-| CVE-2020-28928 | LOW      | No       |             | https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-28928 |
-+----------------+----------+----------+-------------+---------------------------------------------------------------+
++----------------+-----------+----------+-------------+---------------------------------------------------------------+
+|      CVE       | SEVERITY  | IGNORED? | DESCRIPTION |                              URI                              |
++----------------+-----------+----------+-------------+---------------------------------------------------------------+
+| CVE-2022-37434 | UNDEFINED | No       |             | https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-37434 |
++----------------+-----------+----------+-------------+---------------------------------------------------------------+
 
 Ignored CVE severity levels:
 Ignored CVE's:
 
 Final scan result: Failed
-
-There are CVEs found. Fix them first. Will not proceed with pushing XXXXXXXXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine:test
+Error: there are CVEs found! Please, fix them first. Will not proceed with pushing to the destination registries
 ```
 
 ### Push of the real tag with ignored CVE
 
 ```
-$ AWS_ECR_CLIENT_IGNORE_CVE=CVE-2020-28928 aws-ecr-client-linux-amd64 -d XXXXXXXXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine -t test
-
-Note: Stage repo is not specified - will use destination repo as scanning silo
-
-First push image to scanning repo XXXXXXXXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine with the tag alpine-test-scan-1627040374
-
-Checking scan result for the image XXXXXXXXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine:alpine-test-scan-1627040374
+$ AWS_ECR_CLIENT_IGNORE_CVE=CVE-2022-37434 aws-ecr-client-golang --images XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:3.12.12
+aws-ecr-client, version v0.6.0
+Note: Stage repo is not specified - will use the the repo of the first given image as a scanning silo
+Push image to the scanning repo as XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:ecs-client-scan-1662393948
+Checking scan result for the image XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:ecs-client-scan-1662393948
 
 Image scan status: COMPLETE
 
 Found the following CVEs
-+----------------+----------+------------------------------+-------------+---------------------------------------------------------------+
-|      CVE       | SEVERITY |           IGNORED?           | DESCRIPTION |                              URI                              |
-+----------------+----------+------------------------------+-------------+---------------------------------------------------------------+
-| CVE-2020-28928 | LOW      | Yes (ignored individual CVE) |             | https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-28928 |
-+----------------+----------+------------------------------+-------------+---------------------------------------------------------------+
++----------------+-----------+------------------------------+-------------+---------------------------------------------------------------+
+|      CVE       | SEVERITY  |           IGNORED?           | DESCRIPTION |                              URI                              |
++----------------+-----------+------------------------------+-------------+---------------------------------------------------------------+
+| CVE-2022-37434 | UNDEFINED | Yes (Ignored individual CVE) |             | https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-37434 |
++----------------+-----------+------------------------------+-------------+---------------------------------------------------------------+
 
 Ignored CVE severity levels:
-Ignored CVE's:               CVE-2020-28928
+Ignored CVE's:               CVE-2022-37434
 
 Final scan result: Passed
-
-Pushing 798424800762.dkr.ecr.eu-central-1.amazonaws.com/alpine:test
-
-Pushing additional tags: latest
-
+Pushing: XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:3.12.12
 Done
-
 ```
 
 ### Junit report example
@@ -137,21 +126,16 @@ The client handles unsupported images error (for example scratch) as another fin
 ignoring `ECR_ERROR_UNSUPPORTED_IMAGE`
 
 ```
-aws-ecr-client, version v0.5.0
-
-Note: Stage repo is not specified - will use destination repo as scanning silo
-
-First push image to scanning repo as XXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine:alpine-test-scratch-scan-1644784364
-
-Checking scan result for the image XXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine:alpine-test-scratch-scan-1644784364
-
-Image scan status: FAILED
+aws-ecr-client, version v0.6.0
+Note: Stage repo is not specified - will use the the repo of the first given image as a scanning silo
+Push image to the scanning repo as XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:ecs-client-scan-1662392380
+Checking scan result for the image XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:ecs-client-scan-1662392380
 
 Found the following CVEs
 +-----------------------------+---------------+------------------------------+--------------------------------+-----+
 |             CVE             |   SEVERITY    |           IGNORED?           |          DESCRIPTION           | URI |
 +-----------------------------+---------------+------------------------------+--------------------------------+-----+
-| ECR_ERROR_UNSUPPORTED_IMAGE | INFORMATIONAL | Yes (ignored individual CVE) | UnsupportedImageError: The     |     |
+| ECR_ERROR_UNSUPPORTED_IMAGE | INFORMATIONAL | Yes (Ignored individual CVE) | UnsupportedImageError: The     |     |
 |                             |               |                              | operating system and/or        |     |
 |                             |               |                              | package manager are not        |     |
 |                             |               |                              | supported.                     |     |
@@ -161,10 +145,4 @@ Ignored CVE severity levels:
 Ignored CVE's:               ECR_ERROR_UNSUPPORTED_IMAGE
 
 Final scan result: Passed
-
-Writing junit report to: /tmp/tmp.zYXzmPu3yM
-
-Pushing XXXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine:test-scratch
-
-Pushing additional tags: latest
 ```
