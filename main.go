@@ -109,11 +109,7 @@ func main() {
 		},
 	}
 
-	cli.AppHelpTemplate = fmt.Sprintf(`%s
-
-	Find source code, usage examples, report issues, get support: https://github.com/fivexl/aws-ecr-client-golang
-
-	`, cli.AppHelpTemplate)
+	cli.AppHelpTemplate = fmt.Sprintf("%sFind source code, usage examples, report issues, get support: https://github.com/fivexl/aws-ecr-client-golang\n", cli.AppHelpTemplate)
 
 	app.Action = func(c *cli.Context) error {
 
@@ -213,5 +209,4 @@ func main() {
 		fmt.Printf("Error: %v", err)
 		os.Exit(1)
 	}
-	fmt.Println("Done")
 }
