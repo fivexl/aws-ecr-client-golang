@@ -35,8 +35,7 @@ GLOBAL OPTIONS:
    --junit-report-path value, -j value  If set then CVE scan result will be written in JUNIT format to the path provided as a value. Useful for CI (like Jenkins) to keep ignored CVE visible [$AWS_ECR_CLIENT_JUNIT_REPORT_PATH]
    --scan-wait-timeout value            The max duration (in minutes) to wait for the image scan to complete. If exceeded, the operation will fail and the tag will not be pushed. (default: 20) [$AWS_ECR_CLIENT_SCAN_WAIT_TIMEOUT]
    --skip-push, -p                      Only push to scanning silo and do not push to destination repo even if there are no CVE's (useful for CI). (default: false) [$AWS_ECR_CLIENT_SKIP_PUSH]
-   --stage-repo value, -s value         Repository where image will be sent for scanning before pushing it to destination repo with the tag <destination-repo-name>-<tag>-scan-<timestamp>. Will push directly to destination repo with the specified tag if no value provided (default: empty string) [$AWS_ECR_CLIENT_STAGE_REPO]
-
+   --stage-ecr-repo value, -s value     AWS ECR Repository where the image will be sent for scanning before pushing it to destination repo with the tag ecs-client-scan-<timestamp>. If omitted, then the repo of the first wiven image will be used. (default: empty string) [$AWS_ECR_CLIENT_STAGE_ECR_REPO]
 
   Find source code, usage examples, report issues, get support: https://github.com/fivexl/aws-ecr-client-golang
 ```
