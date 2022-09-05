@@ -17,3 +17,4 @@
 # build artifacts
 build/
 release/
+aws-ecr-client-golang
