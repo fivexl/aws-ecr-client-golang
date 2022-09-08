@@ -16,5 +16,6 @@
 
 # build artifacts
 build/
+dist/
 release/
 aws-ecr-client-golang
