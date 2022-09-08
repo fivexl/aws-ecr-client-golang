@@ -2,44 +2,44 @@
 
 The release v0.6.0 includes breaking changes caused by renaming and removing some CLI arguments. Please check the guideline below to see how to migrate your scripts.
 
-#### Case: Push a single tag
+### Case: Push a single tag
 Replace `--destination-repo`, `--tag` and `--additional-tags` with `--images`
 
-BEFORE:
-```
+_BEFORE:_
+```sh
 aws-ecr-client --destination-repo XXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine \
                --tag test
 ```
-AFTER:
-```
+_AFTER:_
+```sh
 aws-ecr-client --images XXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine:test
 ```
 
-#### Case: Push multiple tags
+### Case: Push multiple tags
 Replace `--destination-repo`, `--tag` and `--additional-tags` with `--images` (space separated)
 
-BEFORE:
-```
+_BEFORE:_
+```sh
 aws-ecr-client --destination-repo XXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine \
                --tag test \
                --additional-tags "foo bar"
 ```
-AFTER:
-```
+_AFTER:_
+```sh
 aws-ecr-client --images "XXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine:test XXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine:foo XXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine:bar"
 ```
 
-#### Case: Use a desired stage repo
+### Case: Use a desired stage repo
 Replace `--stage-repo` with `stage-ecr-repo`
 
-BEFORE:
-```
+_BEFORE:_
+```sh
 aws-ecr-client --destination-repo XXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine \
                --tag test \
                --stage-repo XXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine-stage
 ```
-AFTER:
-```
+_AFTER:_
+```sh
 aws-ecr-client --images XXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine:test \
                --stage-ecr-repo XXXXXX.dkr.ecr.eu-central-1.amazonaws.com/alpine-stage
 ```
