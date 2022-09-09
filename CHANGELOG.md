@@ -1,3 +1,9 @@
+### v0.6.0
+
+**IMPORTANT: This release includes breaking changes!** Please check the migration guide: [MIGRATION-v0.6.md](./MIGRATION-v0.6.md)
+
+* Handle full image references with new "--images" argument, https://github.com/fivexl/aws-ecr-client-golang/pull/19
+
 ### v0.5.3
 
 * Fix handling the UnsupportedImageError, https://github.com/fivexl/aws-ecr-client-golang/pull/16
