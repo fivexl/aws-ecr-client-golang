@@ -1,4 +1,4 @@
-project_name: aws-ecr-client-golang
+project_name: aws-ecr-client
 
 before:
   hooks:
