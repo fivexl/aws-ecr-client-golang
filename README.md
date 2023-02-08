@@ -97,6 +97,40 @@ Pushing: XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:3.12.12
 Done
 ```
 
+### GitLab Workflow Example
+
+```
+.ecr_scan:
+  image:
+    name: docker:latest
+  stage: test
+  variables:
+    APP: dts_all_batch
+    PATH_DOCKERFILE: /
+    DOCKER_TLS_CERTDIR: ""
+    ECR_CLIENT_VERSION: 0.6.0
+    AWS_ECR_CLIENT_IGNORE_CVE: CVE-2022-37434 
+    AWS_ECR_CLIENT_IGNORE_CVE_LEVEL: LOW INFORMATIONAL UNDEFINED
+  services:
+    - docker:dind
+  before_script:
+    - apk --no-cache add curl
+    - docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$APP < credentials #AWS Role Credentials 
+    - export TAG_LATEST=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$APP:latest
+    - export TAG_COMMIT=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$APP:$CI_COMMIT_SHORT_SHA
+    - export STAGE_REPO=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/stage
+    - export DOCKER_PATH=$PATH_DOCKERFILE
+    - mkdir ecr; cd ecr; curl --fail --silent --show-error -o ecr.zip -L https://releases.fivexl.io/aws-ecr-client-golang/v${ECR_CLIENT_VERSION}/aws-ecr-client_${ECR_CLIENT_VERSION}_linux_amd64.zip
+    - unzip ecr.zip; mv aws-ecr-client /bin/;  cd ..
+  script:
+    - docker pull $TAG_LATEST || true
+    - docker build --no-cache -t $TAG_COMMIT -t $TAG_LATEST -f $DOCKER_PATH .
+    - aws-ecr-client --images $TAG_COMMIT --stage-ecr-repo $STAGE_REPO
+  needs:
+    - job: getCredentials
+      artifacts: true
+```
+
 ### Junit report example
 
 ```
