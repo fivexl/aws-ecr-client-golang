@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.16.7
 	github.com/aws/aws-sdk-go-v2/config v1.15.13
 	github.com/aws/aws-sdk-go-v2/service/ecr v1.17.8
-	github.com/distribution/distribution v2.8.1+incompatible // indirect
+	github.com/distribution/distribution v2.8.1+incompatible
 	github.com/docker/distribution v2.8.1+incompatible // indirect
 	github.com/docker/docker v20.10.17+incompatible
 	github.com/docker/go-connections v0.4.0 // indirect
@@ -24,8 +24,7 @@ require (
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/stretchr/testify v1.7.0 // indirect
 	github.com/urfave/cli/v2 v2.10.3
-	golang.org/x/net v0.0.0-20220706163947-c90051bbdb60 // indirect
-	golang.org/x/sys v0.0.0-20220704084225-05e143d24a9e // indirect
+	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
