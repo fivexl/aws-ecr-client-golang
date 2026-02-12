@@ -169,11 +169,12 @@ func newUnsupportedImageFinding(description string) []types.ImageScanFinding {
 }
 
 func GetImageScanResults(client *ecr.Client, imageId ImageId, ecrRepoName string, timeout time.Duration) ([]types.ImageScanFinding, error) {
+	imageIdentifier, err := imageId.ToImageIdentifier()
+	if err != nil {
+		return nil, fmt.Errorf("cannot query scan results: %w", err)
+	}
 	input := ecr.DescribeImageScanFindingsInput{
-		ImageId: &types.ImageIdentifier{
-			ImageDigest: &imageId.digest,
-			ImageTag:    &imageId.tag,
-		},
+		ImageId:        imageIdentifier,
 		RepositoryName: &ecrRepoName,
 	}
 

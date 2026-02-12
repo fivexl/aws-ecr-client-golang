@@ -23,8 +23,10 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 
+	"github.com/aws/aws-sdk-go-v2/service/ecr/types"
 	dockerTypes "github.com/docker/docker/api/types"
 	dockerImageTypes "github.com/docker/docker/api/types/image"
 	dockerRegistry "github.com/docker/docker/api/types/registry"
@@ -35,6 +37,23 @@ import (
 type ImageId struct {
 	digest string
 	tag    string
+}
+
+// ToImageIdentifier converts ImageId to an ECR ImageIdentifier, using nil
+// for empty fields to avoid sending empty strings that violate the ECR API
+// parameter constraints (imageDigest must match '[a-zA-Z0-9-_+.]{0,20}:[a-fA-F0-9]{1,128}').
+func (id ImageId) ToImageIdentifier() (*types.ImageIdentifier, error) {
+	if id.digest == "" && id.tag == "" {
+		return nil, fmt.Errorf("image identifier must have at least a digest or a tag, but both are empty")
+	}
+	identifier := &types.ImageIdentifier{}
+	if id.digest != "" {
+		identifier.ImageDigest = &id.digest
+	}
+	if id.tag != "" {
+		identifier.ImageTag = &id.tag
+	}
+	return identifier, nil
 }
 
 func getDockerClient() (*dockerClient.Client, error) {

@@ -156,6 +156,16 @@ func main() {
 			return err
 		}
 
+		// Ensure we have at least the tag we pushed with, in case the Docker
+		// daemon push stream did not include it in the Aux message.
+		if imageId.tag == "" {
+			fmt.Printf("Warning: Docker push did not return a tag, using known tag %s\n", tagForScanning)
+			imageId.tag = tagForScanning
+		}
+		if imageId.digest == "" {
+			fmt.Printf("Warning: Docker push did not return a digest, will identify image by tag only\n")
+		}
+
 		fmt.Printf("Checking scan result for the image %s\n", stageImageRef.String())
 		client, err := GetECRClient()
 		if err != nil {

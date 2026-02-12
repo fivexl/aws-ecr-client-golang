@@ -1,3 +1,11 @@
+### v0.7.1
+
+* Fix InvalidParameterException when Docker push stream returns empty imageDigest (e.g. buildx with OCI index / multi-platform manifest lists)
+* Use nil instead of empty string pointers in ECR ImageIdentifier to comply with API parameter constraints
+* Fall back to known push tag when Docker daemon does not return digest or tag in push stream Aux message
+* Add unit tests for ToImageIdentifier, getImageIdFromDockerDaemonJsonMessages, ECR helper functions, and dedupList
+* Run gofmt -s code simplification
+
 ### v0.7.0
 
 * Switch to AWS native basic scanning (Clair was deprecated on Feb 2, 2026)
