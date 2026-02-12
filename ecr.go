@@ -21,6 +21,7 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -30,8 +31,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	"github.com/aws/aws-sdk-go-v2/service/ecr/types"
-	"github.com/distribution/distribution/reference"
-	dockerTypes "github.com/docker/docker/api/types"
+	"github.com/distribution/reference"
+	dockerRegistry "github.com/docker/docker/api/types/registry"
 	"github.com/olekukonko/tablewriter"
 )
 
@@ -131,14 +132,14 @@ func getAuthorizationToken(client *ecr.Client) ([]types.AuthorizationData, error
 	return output.AuthorizationData, nil
 }
 
-func GetDockerAuthConfig(client *ecr.Client) (dockerTypes.AuthConfig, error) {
+func GetDockerAuthConfig(client *ecr.Client) (dockerRegistry.AuthConfig, error) {
 	authTokens, err := getAuthorizationToken(client)
 	if err != nil {
-		return dockerTypes.AuthConfig{}, err
+		return dockerRegistry.AuthConfig{}, err
 	}
 	// TODO: find token for the correct repo based on its url
 	if len(authTokens) != 1 {
-		return dockerTypes.AuthConfig{}, fmt.Errorf("received %d auth tokens but expected one. Not sure what to do", len(authTokens))
+		return dockerRegistry.AuthConfig{}, fmt.Errorf("received %d auth tokens but expected one. Not sure what to do", len(authTokens))
 	}
 	// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/ecr/types#AuthorizationData
 	// AuthorizationToken *string
@@ -147,14 +148,14 @@ func GetDockerAuthConfig(client *ecr.Client) (dockerTypes.AuthConfig, error) {
 	// user:password for private registry authentication using docker login.
 	decodedToken, err := base64.StdEncoding.DecodeString(*authTokens[0].AuthorizationToken)
 	if err != nil {
-		return dockerTypes.AuthConfig{}, err
+		return dockerRegistry.AuthConfig{}, err
 	}
 	usernamePassword := strings.Split(string(decodedToken), ":")
 	if len(usernamePassword) != 2 {
-		return dockerTypes.AuthConfig{}, fmt.Errorf("received %s as auth token but expected username:password", string(decodedToken))
+		return dockerRegistry.AuthConfig{}, fmt.Errorf("received %s as auth token but expected username:password", string(decodedToken))
 	}
 
-	return dockerTypes.AuthConfig{
+	return dockerRegistry.AuthConfig{
 		Username:      usernamePassword[0],
 		Password:      usernamePassword[1],
 		ServerAddress: *authTokens[0].ProxyEndpoint,
@@ -183,18 +184,53 @@ func GetImageScanResults(client *ecr.Client, imageId ImageId, ecrRepoName string
 
 	var findings []types.ImageScanFinding
 
+	// With AWS native basic scanning, there can be a delay between pushing an image
+	// and the scan becoming available. The ImageScanCompleteWaiter treats
+	// ScanNotFoundException as a terminal error instead of retrying. We handle this
+	// by retrying the waiter when we get ScanNotFoundException, up to the overall timeout.
+	const scanInitRetryInterval = 15 * time.Second
+	const maxScanInitRetries = 20 // up to 5 minutes of waiting for scan to be initiated
+	var output *ecr.DescribeImageScanFindingsOutput
+
 	w := ecr.NewImageScanCompleteWaiter(client)
-	output, err := w.WaitForOutput(context.TODO(), &input, timeout)
-	if err != nil {
-		// Handle unsupported images.
-		// In that case, by some reason, DescribeImageScanFindings returns `ScanStatusFailed`
-		// instead of `ScanStatusUnsupportedImage`. That casues WaitForOutput to return the error.
+
+	var waiterErr error
+	for attempt := 0; attempt <= maxScanInitRetries; attempt++ {
+		output, waiterErr = w.WaitForOutput(context.TODO(), &input, timeout)
+		if waiterErr == nil {
+			break
+		}
+		// Check if the waiter failed because the scan doesn't exist yet
+		var scanNotFound *types.ScanNotFoundException
+		if errors.As(waiterErr, &scanNotFound) {
+			if attempt < maxScanInitRetries {
+				fmt.Printf("Scan not yet initiated, retrying in %s (attempt %d/%d)...\n",
+					scanInitRetryInterval, attempt+1, maxScanInitRetries)
+				time.Sleep(scanInitRetryInterval)
+				continue
+			}
+			// Exhausted retries - treat as unsupported image
+			findings = []types.ImageScanFinding{{
+				Name:        aws.String("ECR_ERROR_UNSUPPORTED_IMAGE"),
+				Description: aws.String("Image scan does not exist - image is not supported for scanning"),
+				Severity:    types.FindingSeverityInformational}}
+			return findings, nil
+		}
+		// For non-ScanNotFound errors, fall through to legacy error handling
+		break
+	}
+
+	if waiterErr != nil {
+		// Handle unsupported images with Clair-based scanning: DescribeImageScanFindings
+		// returns ScanStatusFailed with "UnsupportedImageError" in the description instead
+		// of ScanStatusUnsupportedImage. That causes WaitForOutput to return the error.
 		// So here we have to check the status description for "UnsupportedImageError" separately.
-		failedOutput, err := client.DescribeImageScanFindings(context.TODO(), &input)
-		if err != nil {
-			return nil, err
+		failedOutput, describeErr := client.DescribeImageScanFindings(context.TODO(), &input)
+		if describeErr != nil {
+			return nil, fmt.Errorf("waiting for scan failed: %w, and describing findings also failed: %w", waiterErr, describeErr)
 		}
 		if failedOutput.ImageScanStatus.Status == types.ScanStatusFailed &&
+			failedOutput.ImageScanStatus.Description != nil &&
 			strings.Contains(*failedOutput.ImageScanStatus.Description, "UnsupportedImageError") {
 			findings = []types.ImageScanFinding{{
 				Name:        aws.String("ECR_ERROR_UNSUPPORTED_IMAGE"),
@@ -203,10 +239,21 @@ func GetImageScanResults(client *ecr.Client, imageId ImageId, ecrRepoName string
 			return findings, nil
 		}
 
-		return nil, err
+		return nil, waiterErr
 	}
 	fmt.Printf("\nImage scan status: %s\n", output.ImageScanStatus.Status)
 	findings = output.ImageScanFindings.Findings
+
+	// Paginate through remaining results if there are more pages
+	for output.NextToken != nil {
+		input.NextToken = output.NextToken
+		paginatedOutput, paginateErr := client.DescribeImageScanFindings(context.TODO(), &input)
+		if paginateErr != nil {
+			return nil, paginateErr
+		}
+		findings = append(findings, paginatedOutput.ImageScanFindings.Findings...)
+		output.NextToken = paginatedOutput.NextToken
+	}
 
 	return findings, nil
 }
@@ -216,8 +263,7 @@ func PrintFindings(findings []types.ImageScanFinding, severityLevelsToIgnore []s
 	ignoredFindings := []types.ImageScanFinding{}
 	table := tablewriter.NewWriter(os.Stdout)
 
-	table.SetAlignment(tablewriter.ALIGN_LEFT)
-	table.SetHeader([]string{"CVE", "Severity", "Ignored?", "Description", "URI"})
+	table.Header("CVE", "Severity", "Ignored?", "Description", "URI")
 
 	for _, finding := range findings {
 		ignored := "No"
@@ -237,11 +283,11 @@ func PrintFindings(findings []types.ImageScanFinding, severityLevelsToIgnore []s
 			ignoredFindings = append(ignoredFindings, finding)
 			ignored = fmt.Sprintf("Yes (%s)", reason)
 		}
-		table.Append([]string{name, string(finding.Severity), ignored, description, uri})
+		_ = table.Append(name, string(finding.Severity), ignored, description, uri)
 	}
 
 	fmt.Printf("\nFound the following CVEs\n")
-	table.Render()
+	_ = table.Render()
 
 	fmt.Printf("\nIgnored CVE severity levels: %s\n", strings.Join(severityLevelsToIgnore, ", "))
 	fmt.Printf("Ignored CVE's:               %s\n\n", strings.Join(cveToIgnore, ", "))

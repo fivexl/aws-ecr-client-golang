@@ -26,6 +26,8 @@ import (
 	"io"
 
 	dockerTypes "github.com/docker/docker/api/types"
+	dockerImageTypes "github.com/docker/docker/api/types/image"
+	dockerRegistry "github.com/docker/docker/api/types/registry"
 	dockerClient "github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/jsonmessage"
 )
@@ -39,17 +41,17 @@ func getDockerClient() (*dockerClient.Client, error) {
 	return dockerClient.NewClientWithOpts(dockerClient.FromEnv, dockerClient.WithAPIVersionNegotiation())
 }
 
-func imagePush(client *dockerClient.Client, authConfig dockerTypes.AuthConfig, imageRef string) (ImageId, error) {
+func imagePush(client *dockerClient.Client, authConfig dockerRegistry.AuthConfig, imageRef string) (ImageId, error) {
 
 	authConfigBytes, _ := json.Marshal(authConfig)
 	authConfigEncoded := base64.URLEncoding.EncodeToString(authConfigBytes)
 
-	opts := dockerTypes.ImagePushOptions{RegistryAuth: authConfigEncoded}
+	opts := dockerImageTypes.PushOptions{RegistryAuth: authConfigEncoded}
 	rd, err := client.ImagePush(context.Background(), imageRef, opts)
 	if err != nil {
 		return ImageId{}, err
 	}
-	defer rd.Close()
+	defer func() { _ = rd.Close() }()
 
 	buf := new(bytes.Buffer)
 	_, err = buf.ReadFrom(rd)

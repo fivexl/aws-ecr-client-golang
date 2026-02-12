@@ -2,7 +2,9 @@
 
 # aws-ecr-client
 
-AWS ECR client for automated push to ECR and handling of vulnerability scanning results
+AWS ECR client for automated push to ECR and handling of vulnerability scanning results.
+
+Supports **AWS native basic scanning** (the default since Feb 2, 2026, replacing the deprecated Clair-based scanning).
 
 Features:
 * Automatically gets authorization token for ECR repo
@@ -11,6 +13,8 @@ Features:
 * Can ignore all CVE's of certain severity level (not recommended but useful when you have to deal with docker image over which you have no control)
 * Can ignore individual CVE's (not recommended but useful when you might really really need to unblock that pipeline)
 * Can output CVE scan report in Junit format so you can feed to to Jenkins or some other system for visibility
+* Handles scan initiation delays with AWS native scanning (automatic retries)
+* Paginates through all scan findings for complete results
 
 See examples below for more details
 
@@ -19,7 +23,7 @@ See examples below for more details
 ```
 NAME:
    aws-ecr-client-golang - AWS ECR client to automated push to ECR and handling of vulnerability.
-                           Version v0.6.0
+                           Version v0.7.0
 
 USAGE:
    aws-ecr-client-golang [global options] command [command options] [arguments...]
@@ -49,11 +53,11 @@ Download official builds from [here](https://releases.fivexl.io/aws-ecr-client-g
 ### Push of the real tag is stopped because of CVE
 
 ```
-$ aws-ecr-client-golang --images XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:3.12.12
-aws-ecr-client, version v0.6.0
+$ aws-ecr-client-golang --images XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/myimage:latest
+aws-ecr-client, version v0.7.0
 Note: Stage repo is not specified - will use the the repo of the first given image as a scanning silo
-Push image to the scanning repo as XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:ecs-client-scan-1662393883
-Checking scan result for the image XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:ecs-client-scan-1662393883
+Push image to the scanning repo as XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/myimage:ecs-client-scan-1770898008
+Checking scan result for the image XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/myimage:ecs-client-scan-1770898008
 
 Image scan status: COMPLETE
 
@@ -61,7 +65,7 @@ Found the following CVEs
 +----------------+-----------+----------+-------------+---------------------------------------------------------------+
 |      CVE       | SEVERITY  | IGNORED? | DESCRIPTION |                              URI                              |
 +----------------+-----------+----------+-------------+---------------------------------------------------------------+
-| CVE-2022-37434 | UNDEFINED | No       |             | https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-37434 |
+| CVE-2024-58015 | HIGH      | No       |             | https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-58015 |
 +----------------+-----------+----------+-------------+---------------------------------------------------------------+
 
 Ignored CVE severity levels:
@@ -74,11 +78,11 @@ Error: there are CVEs found! Please, fix them first. Will not proceed with pushi
 ### Push of the real tag with ignored CVE
 
 ```
-$ AWS_ECR_CLIENT_IGNORE_CVE=CVE-2022-37434 aws-ecr-client-golang --images XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:3.12.12
-aws-ecr-client, version v0.6.0
+$ AWS_ECR_CLIENT_IGNORE_CVE=CVE-2024-58015 aws-ecr-client-golang --images XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/myimage:latest
+aws-ecr-client, version v0.7.0
 Note: Stage repo is not specified - will use the the repo of the first given image as a scanning silo
-Push image to the scanning repo as XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:ecs-client-scan-1662393948
-Checking scan result for the image XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:ecs-client-scan-1662393948
+Push image to the scanning repo as XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/myimage:ecs-client-scan-1770898062
+Checking scan result for the image XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/myimage:ecs-client-scan-1770898062
 
 Image scan status: COMPLETE
 
@@ -86,15 +90,14 @@ Found the following CVEs
 +----------------+-----------+------------------------------+-------------+---------------------------------------------------------------+
 |      CVE       | SEVERITY  |           IGNORED?           | DESCRIPTION |                              URI                              |
 +----------------+-----------+------------------------------+-------------+---------------------------------------------------------------+
-| CVE-2022-37434 | UNDEFINED | Yes (Ignored individual CVE) |             | https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-37434 |
+| CVE-2024-58015 | HIGH      | Yes (Ignored individual CVE) |             | https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-58015 |
 +----------------+-----------+------------------------------+-------------+---------------------------------------------------------------+
 
 Ignored CVE severity levels:
-Ignored CVE's:               CVE-2022-37434
+Ignored CVE's:               CVE-2024-58015
 
 Final scan result: Passed
-Pushing: XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:3.12.12
-Done
+Pushing: XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/myimage:latest
 ```
 
 ### GitLab Workflow Example
@@ -108,8 +111,8 @@ Done
     APP: dts_all_batch
     PATH_DOCKERFILE: /
     DOCKER_TLS_CERTDIR: ""
-    ECR_CLIENT_VERSION: 0.6.0
-    AWS_ECR_CLIENT_IGNORE_CVE: CVE-2022-37434 
+    ECR_CLIENT_VERSION: 0.7.0
+    AWS_ECR_CLIENT_IGNORE_CVE: CVE-2024-58015 
     AWS_ECR_CLIENT_IGNORE_CVE_LEVEL: LOW INFORMATIONAL UNDEFINED
   services:
     - docker:dind
@@ -138,7 +141,7 @@ Done
 <testsuites>
 	<testsuite tests="6" failures="1" time="6.000" name="Container Image CVE scan">
 		<properties>
-			<property name="go.version" value="go1.14.4"></property>
+			<property name="go.version" value="go1.24.0"></property>
 			<property name="coverage.statements.pct" value="100"></property>
 		</properties>
 		<testcase classname="Container Image CVE scan" name="CRITICAL" time="1.000"></testcase>
@@ -159,20 +162,18 @@ The client handles unsupported images error (for example scratch) as another fin
 ignoring `ECR_ERROR_UNSUPPORTED_IMAGE`
 
 ```
-aws-ecr-client, version v0.6.0
+aws-ecr-client, version v0.7.0
 Note: Stage repo is not specified - will use the the repo of the first given image as a scanning silo
-Push image to the scanning repo as XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:ecs-client-scan-1662392380
-Checking scan result for the image XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:ecs-client-scan-1662392380
+Push image to the scanning repo as XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:ecs-client-scan-1770897999
+Checking scan result for the image XXXXXXXXXXXX.dkr.ecr.us-east-1.amazonaws.com/alpine:ecs-client-scan-1770897999
 
 Found the following CVEs
-+-----------------------------+---------------+------------------------------+--------------------------------+-----+
-|             CVE             |   SEVERITY    |           IGNORED?           |          DESCRIPTION           | URI |
-+-----------------------------+---------------+------------------------------+--------------------------------+-----+
-| ECR_ERROR_UNSUPPORTED_IMAGE | INFORMATIONAL | Yes (Ignored individual CVE) | UnsupportedImageError: The     |     |
-|                             |               |                              | operating system and/or        |     |
-|                             |               |                              | package manager are not        |     |
-|                             |               |                              | supported.                     |     |
-+-----------------------------+---------------+------------------------------+--------------------------------+-----+
++-----------------------------+---------------+------------------------------+-----------------------------------------------------------+-----+
+|             CVE             |   SEVERITY    |           IGNORED?           |                        DESCRIPTION                        | URI |
++-----------------------------+---------------+------------------------------+-----------------------------------------------------------+-----+
+| ECR_ERROR_UNSUPPORTED_IMAGE | INFORMATIONAL | Yes (Ignored individual CVE) | UnsupportedImageError: The operating system and/or        |     |
+|                             |               |                              | package manager are not supported.                        |     |
++-----------------------------+---------------+------------------------------+-----------------------------------------------------------+-----+
 
 Ignored CVE severity levels:
 Ignored CVE's:               ECR_ERROR_UNSUPPORTED_IMAGE

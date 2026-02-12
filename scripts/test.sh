@@ -10,9 +10,11 @@ create_repo() {
     fi
 }
 
-REPO_NAME=alpine
+REPO_NAME=python-test
 IMAGE_TAG=test
-IMAGE_DIGEST=sha256:2582893dec6f12fd499d3a709477f2c0c0c1dfcd28024c93f1f0626b9e3540c8
+# python:3.13 based on Debian - has many known CVEs (HIGH, MEDIUM, UNDEFINED)
+IMAGE_REF=python:3.13
+IMAGE_DIGEST=sha256:498320f325ad70645e99ff676347987ca9117728784b8273fb6d25cc735ad9c0
 REPORT_PATH=$(mktemp)
 TOP=$(git rev-parse --show-toplevel)
 MACHINE_ARCH=$(arch)
@@ -33,28 +35,34 @@ fi
 EXECUTABLE=${BUILD_DIR}/aws-ecr-client-${OS}-${ARCH}
 
 # Prepare image to scan
-docker pull alpine@${IMAGE_DIGEST}
+docker pull ${IMAGE_REF}@${IMAGE_DIGEST}
 
 # Prepare ECR repo for the test
 create_repo ${REPO_NAME}
 REPO_URI=$(aws ecr describe-repositories --repository-names ${REPO_NAME} --query "repositories[0].repositoryUri" --output text)
 
 # Test scratch image
-echo "==> TEST: Scratch image, resin/scratch"
+echo "==> TEST: Scratch image (built from scratch with minimal layer)"
 export SCRATCH_IMAGE_TAG=${IMAGE_TAG}-scratch
-docker pull resin/scratch
-docker tag resin/scratch ${REPO_URI}:${SCRATCH_IMAGE_TAG}
+# resin/scratch uses deprecated Docker image format v1, build a minimal scratch image instead
+# The image needs at least 1 layer to be pushable to ECR, but should still be unscannable
+SCRATCH_TMPDIR=$(mktemp -d)
+printf 'FROM scratch\nCOPY Dockerfile /scratch\n' > ${SCRATCH_TMPDIR}/Dockerfile
+docker build -t local-scratch ${SCRATCH_TMPDIR}
+rm -rf ${SCRATCH_TMPDIR}
+docker tag local-scratch ${REPO_URI}:${SCRATCH_IMAGE_TAG}
 export AWS_ECR_CLIENT_IMAGES=${REPO_URI}:${SCRATCH_IMAGE_TAG}
 export AWS_ECR_CLIENT_IGNORE_CVE="ECR_ERROR_UNSUPPORTED_IMAGE"
 export AWS_ECR_CLIENT_IGNORE_CVE_LEVEL=""
 export AWS_ECR_CLIENT_JUNIT_REPORT_PATH=${REPORT_PATH}
 ${EXECUTABLE}
 
-echo "==> TEST: Alpine image, alpine@${IMAGE_DIGEST}"
-docker tag alpine@${IMAGE_DIGEST} ${REPO_URI}:${IMAGE_TAG}
+echo "==> TEST: python:3.13, ${IMAGE_REF}@${IMAGE_DIGEST}"
+docker tag ${IMAGE_REF}@${IMAGE_DIGEST} ${REPO_URI}:${IMAGE_TAG}
 export AWS_ECR_CLIENT_IMAGES=${REPO_URI}:${IMAGE_TAG}
-export AWS_ECR_CLIENT_IGNORE_CVE="CVE-2020-28928 CVE-2021-42374 CVE-2021-42375 CVE-2022-28391 CVE-2022-37434 ALPINE-13661"
-export AWS_ECR_CLIENT_IGNORE_CVE_LEVEL="MEDIUM"
+# Ignore all severity levels so the scan passes
+export AWS_ECR_CLIENT_IGNORE_CVE=""
+export AWS_ECR_CLIENT_IGNORE_CVE_LEVEL="HIGH MEDIUM UNDEFINED"
 export AWS_ECR_CLIENT_JUNIT_REPORT_PATH=${REPORT_PATH}
 ${EXECUTABLE}
 
@@ -62,24 +70,30 @@ ${EXECUTABLE}
 cat ${REPORT_PATH}
 
 # Test repo name with slash
-echo "==> TEST: Alpine image, alpine@${IMAGE_DIGEST}, with repo having slash"
+echo "==> TEST: python:3.13, ${IMAGE_REF}@${IMAGE_DIGEST}, with repo having slash"
 create_repo ${REPO_NAME}/test
 REPO_URI=$(aws ecr describe-repositories --repository-names ${REPO_NAME}/test --query "repositories[0].repositoryUri" --output text)
-docker tag alpine@${IMAGE_DIGEST} ${REPO_URI}:${IMAGE_TAG}
+docker tag ${IMAGE_REF}@${IMAGE_DIGEST} ${REPO_URI}:${IMAGE_TAG}
 
 export AWS_ECR_CLIENT_IMAGES=${REPO_URI}:${IMAGE_TAG}
+export AWS_ECR_CLIENT_IGNORE_CVE=""
+export AWS_ECR_CLIENT_IGNORE_CVE_LEVEL="HIGH MEDIUM UNDEFINED"
 export AWS_ECR_CLIENT_JUNIT_REPORT_PATH=${REPORT_PATH}
 ${EXECUTABLE}
 
 # Test that script fails if we do not ignore CVEs
 # since there are CVEs in that image
-echo "==> TEST: Alpine image, alpine@${IMAGE_DIGEST}, without ignored CVE - expeced to fail"
-export AWS_ECR_CLIENT_IGNORE_CVE="CVE-2021-42386"
-export AWS_ECR_CLIENT_IGNORE_CVE_LEVEL="LOW"
+echo "==> TEST: python:3.13, without sufficient ignores - expected to fail"
+REPO_URI=$(aws ecr describe-repositories --repository-names ${REPO_NAME} --query "repositories[0].repositoryUri" --output text)
+export AWS_ECR_CLIENT_IMAGES=${REPO_URI}:${IMAGE_TAG}
+export AWS_ECR_CLIENT_IGNORE_CVE="CVE-2024-58015"
+export AWS_ECR_CLIENT_IGNORE_CVE_LEVEL=""
+export AWS_ECR_CLIENT_JUNIT_REPORT_PATH=${REPORT_PATH}
 set +e
 ${EXECUTABLE}
 if [ "$?" == 0 ]; then
     echo "this test should have failed. there are CVEs in the image"
+    exit 1
 fi
 set -e
 
@@ -87,13 +101,14 @@ set -e
 # We used to have a bug (fixed in 0.5.1) that caused to scan result to be set
 # to passed when user repeared the same levels twice and we didn't account for that
 # resulting in number of ignored CVEs being higher than total number of CVEs reported :facepalm:
-echo "==> TEST: Alpine image, alpine@${IMAGE_DIGEST}, with duplicated CVE and levels - expeced to fail"
-export AWS_ECR_CLIENT_IGNORE_CVE="CVE-2020-28928 CVE-2020-28928 CVE-2020-28928 CVE-2020-28928 CVE-2020-28928 CVE-2020-28928 CVE-2020-28928"
+echo "==> TEST: python:3.13, with duplicated CVE and levels - expected to fail"
+export AWS_ECR_CLIENT_IGNORE_CVE="CVE-2024-58015 CVE-2024-58015 CVE-2024-58015 CVE-2024-58015 CVE-2024-58015 CVE-2024-58015 CVE-2024-58015"
 export AWS_ECR_CLIENT_IGNORE_CVE_LEVEL="MEDIUM MEDIUM MEDIUM"
 set +e
 ${EXECUTABLE}
 if [ "$?" == 0 ]; then
     echo "this test should have failed. there are CVEs in the image"
+    exit 1
 fi
 set -e
 
