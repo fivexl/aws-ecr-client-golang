@@ -63,13 +63,7 @@ func imagePush(client *dockerClient.Client, authConfig dockerRegistry.AuthConfig
 }
 
 func imageTag(client *dockerClient.Client, imageId string, newImageId string) error {
-
-	err := client.ImageTag(context.Background(), imageId, newImageId)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return client.ImageTag(context.Background(), imageId, newImageId)
 }
 
 func getImageIdFromDockerDaemonJsonMessages(message bytes.Buffer) (ImageId, error) {
@@ -90,10 +84,9 @@ func getImageIdFromDockerDaemonJsonMessages(message bytes.Buffer) (ImageId, erro
 			var r dockerTypes.PushResult
 			if err := json.Unmarshal(*jsonMessage.Aux, &r); err != nil {
 				return result, err
-			} else {
-				result.tag = r.Tag
-				result.digest = r.Digest
 			}
+			result.tag = r.Tag
+			result.digest = r.Digest
 		}
 	}
 	return result, nil

@@ -18,17 +18,13 @@ limitations under the License.
 package main
 
 func dedupList(inList []string) []string {
-	// Use look up table to avoid iterating over the list
-	// again and again
-	lookUpTable := make(map[string]bool)
-	outList := []string{}
+	seen := make(map[string]struct{})
+	result := []string{}
 	for _, item := range inList {
-		// if the item is in the look up table then we should
-		// have it in the list
-		if _, value := lookUpTable[item]; !value {
-			lookUpTable[item] = true
-			outList = append(outList, item)
+		if _, exists := seen[item]; !exists {
+			seen[item] = struct{}{}
+			result = append(result, item)
 		}
 	}
-	return outList
+	return result
 }

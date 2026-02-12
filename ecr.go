@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -37,7 +38,6 @@ import (
 )
 
 func GetFindingSeverityLevelsAsList() []string {
-	// TODO: is there a better way?
 	return []string{
 		string(types.FindingSeverityCritical),
 		string(types.FindingSeverityHigh),
@@ -83,29 +83,19 @@ func GetIgnoredFindings(findings []types.ImageScanFinding, severityLevelsToIgnor
 }
 
 func IsFindingIgnored(finding types.ImageScanFinding, severityLevelsToIgnore []string, cveToIgnore []string) (bool, string) {
-	for _, severityLevel := range severityLevelsToIgnore {
-		if string(finding.Severity) == severityLevel {
-			return true, "Ignored severyity level"
-		}
+	if slices.Contains(severityLevelsToIgnore, string(finding.Severity)) {
+		return true, "Ignored severyity level"
 	}
-	for _, cve := range cveToIgnore {
-		if finding.Name != nil && string(*finding.Name) == cve {
-			return true, "Ignored individual CVE"
-		}
+	if finding.Name != nil && slices.Contains(cveToIgnore, *finding.Name) {
+		return true, "Ignored individual CVE"
 	}
 	return false, ""
 }
 
-// TODO: is there a better way?
 func AreSeverityLevelsValid(levels string) (bool, error) {
+	validLevels := GetFindingSeverityLevelsAsList()
 	for _, level := range strings.Fields(levels) {
-		isValid := false
-		for _, validLevel := range GetFindingSeverityLevelsAsList() {
-			if level == validLevel {
-				isValid = true
-			}
-		}
-		if !isValid {
+		if !slices.Contains(validLevels, level) {
 			return false, fmt.Errorf("%s is not a valid finding severity level. Valid levels are: %s", level, GetFindingSeverityLevelsAsString())
 		}
 	}
@@ -117,10 +107,7 @@ func GetECRClient() (*ecr.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	client := ecr.NewFromConfig(cfg)
-
-	return client, nil
+	return ecr.NewFromConfig(cfg), nil
 }
 
 func getAuthorizationToken(client *ecr.Client) ([]types.AuthorizationData, error) {
@@ -173,6 +160,14 @@ func GetECRRepo(registryName string) (reference.Named, error) {
 	return reg, nil
 }
 
+func newUnsupportedImageFinding(description string) []types.ImageScanFinding {
+	return []types.ImageScanFinding{{
+		Name:        aws.String("ECR_ERROR_UNSUPPORTED_IMAGE"),
+		Description: aws.String(description),
+		Severity:    types.FindingSeverityInformational,
+	}}
+}
+
 func GetImageScanResults(client *ecr.Client, imageId ImageId, ecrRepoName string, timeout time.Duration) ([]types.ImageScanFinding, error) {
 	input := ecr.DescribeImageScanFindingsInput{
 		ImageId: &types.ImageIdentifier{
@@ -210,11 +205,7 @@ func GetImageScanResults(client *ecr.Client, imageId ImageId, ecrRepoName string
 				continue
 			}
 			// Exhausted retries - treat as unsupported image
-			findings = []types.ImageScanFinding{{
-				Name:        aws.String("ECR_ERROR_UNSUPPORTED_IMAGE"),
-				Description: aws.String("Image scan does not exist - image is not supported for scanning"),
-				Severity:    types.FindingSeverityInformational}}
-			return findings, nil
+			return newUnsupportedImageFinding("Image scan does not exist - image is not supported for scanning"), nil
 		}
 		// For non-ScanNotFound errors, fall through to legacy error handling
 		break
@@ -232,11 +223,7 @@ func GetImageScanResults(client *ecr.Client, imageId ImageId, ecrRepoName string
 		if failedOutput.ImageScanStatus.Status == types.ScanStatusFailed &&
 			failedOutput.ImageScanStatus.Description != nil &&
 			strings.Contains(*failedOutput.ImageScanStatus.Description, "UnsupportedImageError") {
-			findings = []types.ImageScanFinding{{
-				Name:        aws.String("ECR_ERROR_UNSUPPORTED_IMAGE"),
-				Description: failedOutput.ImageScanStatus.Description,
-				Severity:    types.FindingSeverityInformational}}
-			return findings, nil
+			return newUnsupportedImageFinding(*failedOutput.ImageScanStatus.Description), nil
 		}
 
 		return nil, waiterErr
