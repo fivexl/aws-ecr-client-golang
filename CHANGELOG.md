@@ -1,3 +1,17 @@
+### v0.7.0
+
+* Switch to AWS native basic scanning (Clair was deprecated on Feb 2, 2026)
+* Add retry logic for scan initiation delay with AWS native scanning (handles ScanNotFoundException)
+* Add pagination for DescribeImageScanFindings to collect all findings across multiple pages
+* Upgrade AWS SDK Go v2 (v1.16.7 -> v1.41.1, ECR service v1.17.8 -> v1.55.1)
+* Upgrade Go from 1.14 to 1.24
+* Upgrade Docker client library (v20.10.17 -> v28.5.2)
+* Upgrade distribution/reference, urfave/cli (v2.10.3 -> v2.27.7), tablewriter (v0.0.5 -> v1.1.3)
+* Update CI: GitHub Actions (checkout v4, setup-go v5, goreleaser v6, golangci-lint v6, codeql v3)
+* Update golangci-lint (v1.46.2 -> v2.9.0) and fix errcheck findings
+* Update test suite to use python:3.13 (Debian-based) instead of old Alpine for CVE tests
+* Replace deprecated resin/scratch with locally built scratch image in tests
+
 ### v0.6.0
 
 **IMPORTANT: This release includes breaking changes!** Please check the migration guide: [MIGRATION-v0.6.md](./MIGRATION-v0.6.md)

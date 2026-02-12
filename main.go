@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/distribution/distribution/reference"
+	"github.com/distribution/reference"
 	"github.com/urfave/cli/v2"
 )
 
@@ -177,7 +177,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			defer junitFile.Close()
+			defer func() { _ = junitFile.Close() }()
 			err = WriteJunitReport(findings, junitFile)
 			if err != nil {
 				return err

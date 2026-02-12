@@ -50,7 +50,7 @@ func WriteJunitReport(findings []types.ImageScanFinding, output io.Writer) error
 		}
 		test := parser.Test{
 			Name:     severity,
-			Duration: time.Duration(1) * time.Second,
+			Duration: time.Second,
 			Result:   result,
 			Output:   output,
 		}
