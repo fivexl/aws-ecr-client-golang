@@ -19,11 +19,73 @@ limitations under the License.
 package main
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	"github.com/aws/aws-sdk-go-v2/service/ecr/types"
 )
+
+// --- Mock types for testing getImageScanResultsWithWaiter ---
+
+type waiterResult struct {
+	output *ecr.DescribeImageScanFindingsOutput
+	err    error
+}
+
+// mockScanWaiter implements imageScanWaiter for testing.
+type mockScanWaiter struct {
+	calls   int
+	results []waiterResult
+}
+
+func (m *mockScanWaiter) WaitForOutput(ctx context.Context, params *ecr.DescribeImageScanFindingsInput, maxWaitDur time.Duration, optFns ...func(*ecr.ImageScanCompleteWaiterOptions)) (*ecr.DescribeImageScanFindingsOutput, error) {
+	if m.calls >= len(m.results) {
+		return nil, fmt.Errorf("mockScanWaiter: unexpected call %d (only %d results configured)", m.calls, len(m.results))
+	}
+	r := m.results[m.calls]
+	m.calls++
+	return r.output, r.err
+}
+
+type describerResult struct {
+	output *ecr.DescribeImageScanFindingsOutput
+	err    error
+}
+
+// mockScanDescriber implements imageScanDescriber for testing.
+type mockScanDescriber struct {
+	calls   int
+	results []describerResult
+}
+
+func (m *mockScanDescriber) DescribeImageScanFindings(ctx context.Context, params *ecr.DescribeImageScanFindingsInput, optFns ...func(*ecr.Options)) (*ecr.DescribeImageScanFindingsOutput, error) {
+	if m.calls >= len(m.results) {
+		return nil, fmt.Errorf("mockScanDescriber: unexpected call %d (only %d results configured)", m.calls, len(m.results))
+	}
+	r := m.results[m.calls]
+	m.calls++
+	return r.output, r.err
+}
+
+// helper to build a standard test input
+func testScanInput() ecr.DescribeImageScanFindingsInput {
+	repoName := "myrepo"
+	return ecr.DescribeImageScanFindingsInput{
+		ImageId:        &types.ImageIdentifier{ImageDigest: aws.String("sha256:abc123")},
+		RepositoryName: &repoName,
+	}
+}
+
+// helper for a fast retry config (no sleeps)
+func fastRetryConfig(maxRetries int) scanRetryConfig {
+	return scanRetryConfig{maxRetries: maxRetries, retryInterval: 0}
+}
 
 func TestGetFindingSeverityLevelsAsList(t *testing.T) {
 	levels := GetFindingSeverityLevelsAsList()
@@ -407,5 +469,294 @@ func TestNewUnsupportedImageFinding(t *testing.T) {
 	}
 	if findings[0].Severity != types.FindingSeverityInformational {
 		t.Errorf("expected severity INFORMATIONAL, got %s", findings[0].Severity)
+	}
+}
+
+// --- Tests for getImageScanResultsWithWaiter ---
+
+func TestGetScanResults_ImmediateSuccess(t *testing.T) {
+	waiter := &mockScanWaiter{
+		results: []waiterResult{{
+			output: &ecr.DescribeImageScanFindingsOutput{
+				ImageScanStatus: &types.ImageScanStatus{
+					Status: types.ScanStatusComplete,
+				},
+				ImageScanFindings: &types.ImageScanFindings{
+					Findings: []types.ImageScanFinding{
+						{Name: aws.String("CVE-2024-0001"), Severity: types.FindingSeverityHigh},
+					},
+				},
+			},
+		}},
+	}
+	describer := &mockScanDescriber{}
+
+	findings, err := getImageScanResultsWithWaiter(waiter, describer, testScanInput(), time.Minute, fastRetryConfig(3))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
+	}
+	if *findings[0].Name != "CVE-2024-0001" {
+		t.Errorf("expected CVE-2024-0001, got %s", *findings[0].Name)
+	}
+	if waiter.calls != 1 {
+		t.Errorf("expected 1 waiter call, got %d", waiter.calls)
+	}
+	if describer.calls != 0 {
+		t.Errorf("expected 0 describer calls, got %d", describer.calls)
+	}
+}
+
+func TestGetScanResults_ScanNotFoundThenSuccess(t *testing.T) {
+	scanNotFoundErr := &types.ScanNotFoundException{Message: aws.String("scan not found")}
+	waiter := &mockScanWaiter{
+		results: []waiterResult{
+			{err: scanNotFoundErr},
+			{err: scanNotFoundErr},
+			{output: &ecr.DescribeImageScanFindingsOutput{
+				ImageScanStatus: &types.ImageScanStatus{Status: types.ScanStatusComplete},
+				ImageScanFindings: &types.ImageScanFindings{
+					Findings: []types.ImageScanFinding{
+						{Name: aws.String("CVE-2024-0001"), Severity: types.FindingSeverityHigh},
+					},
+				},
+			}},
+		},
+	}
+	describer := &mockScanDescriber{}
+
+	findings, err := getImageScanResultsWithWaiter(waiter, describer, testScanInput(), time.Minute, fastRetryConfig(5))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
+	}
+	if waiter.calls != 3 {
+		t.Errorf("expected 3 waiter calls (2 retries + 1 success), got %d", waiter.calls)
+	}
+}
+
+func TestGetScanResults_ScanNotFoundRetriesExhausted_ReturnsError(t *testing.T) {
+	scanNotFoundErr := &types.ScanNotFoundException{Message: aws.String("scan not found")}
+	maxRetries := 3
+
+	// All attempts (initial + retries) return ScanNotFound
+	results := make([]waiterResult, maxRetries+1)
+	for i := range results {
+		results[i] = waiterResult{err: scanNotFoundErr}
+	}
+	waiter := &mockScanWaiter{results: results}
+	describer := &mockScanDescriber{}
+
+	findings, err := getImageScanResultsWithWaiter(waiter, describer, testScanInput(), time.Minute, fastRetryConfig(maxRetries))
+
+	// Must return an error - NOT an unsupported image finding
+	if err == nil {
+		t.Fatal("expected error when scan retries exhausted, got nil")
+	}
+	if findings != nil {
+		t.Errorf("expected nil findings, got %v", findings)
+	}
+
+	// Error message should indicate retries were exhausted
+	if !strings.Contains(err.Error(), "scan not found after") {
+		t.Errorf("expected error message to contain 'scan not found after', got: %s", err.Error())
+	}
+
+	// Original ScanNotFoundException should be wrapped in the error chain
+	var scanNotFound *types.ScanNotFoundException
+	if !errors.As(err, &scanNotFound) {
+		t.Error("expected ScanNotFoundException in error chain")
+	}
+
+	// All retry attempts should have been made
+	if waiter.calls != maxRetries+1 {
+		t.Errorf("expected %d waiter calls, got %d", maxRetries+1, waiter.calls)
+	}
+
+	// Describer should NOT be called - we return error directly from the retry loop
+	if describer.calls != 0 {
+		t.Errorf("expected 0 describer calls (no fallback for exhausted retries), got %d", describer.calls)
+	}
+}
+
+func TestGetScanResults_ScanNotFoundRetriesExhausted_DoesNotReturnUnsupportedImageFinding(t *testing.T) {
+	// This is the key safety test: exhausted ScanNotFound retries must NOT be silently
+	// treated as an unsupported image, because that would let unscanned images pass
+	// through the security gate for users who ignore ECR_ERROR_UNSUPPORTED_IMAGE.
+	scanNotFoundErr := &types.ScanNotFoundException{Message: aws.String("scan not found")}
+
+	waiter := &mockScanWaiter{
+		results: []waiterResult{
+			{err: scanNotFoundErr},
+			{err: scanNotFoundErr},
+		},
+	}
+	describer := &mockScanDescriber{}
+
+	findings, err := getImageScanResultsWithWaiter(waiter, describer, testScanInput(), time.Minute, fastRetryConfig(1))
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	// Verify we did NOT get an ECR_ERROR_UNSUPPORTED_IMAGE finding
+	if findings != nil {
+		for _, f := range findings {
+			if f.Name != nil && *f.Name == "ECR_ERROR_UNSUPPORTED_IMAGE" {
+				t.Error("exhausted ScanNotFound retries must NOT return ECR_ERROR_UNSUPPORTED_IMAGE finding")
+			}
+		}
+	}
+}
+
+func TestGetScanResults_NonScanNotFoundError_FallbackFindsUnsupportedImage(t *testing.T) {
+	waiter := &mockScanWaiter{
+		results: []waiterResult{{err: fmt.Errorf("waiter failed: scan status failed")}},
+	}
+	describer := &mockScanDescriber{
+		results: []describerResult{{
+			output: &ecr.DescribeImageScanFindingsOutput{
+				ImageScanStatus: &types.ImageScanStatus{
+					Status:      types.ScanStatusFailed,
+					Description: aws.String("UnsupportedImageError: The operating system and/or package manager are not supported."),
+				},
+				ImageScanFindings: &types.ImageScanFindings{},
+			},
+		}},
+	}
+
+	findings, err := getImageScanResultsWithWaiter(waiter, describer, testScanInput(), time.Minute, fastRetryConfig(3))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
+	}
+	if *findings[0].Name != "ECR_ERROR_UNSUPPORTED_IMAGE" {
+		t.Errorf("expected ECR_ERROR_UNSUPPORTED_IMAGE, got %s", *findings[0].Name)
+	}
+}
+
+func TestGetScanResults_NonScanNotFoundError_FallbackAlsoFails(t *testing.T) {
+	waiter := &mockScanWaiter{
+		results: []waiterResult{{err: fmt.Errorf("waiter failed")}},
+	}
+	describer := &mockScanDescriber{
+		results: []describerResult{{err: fmt.Errorf("describe also failed")}},
+	}
+
+	_, err := getImageScanResultsWithWaiter(waiter, describer, testScanInput(), time.Minute, fastRetryConfig(3))
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "waiting for scan failed") {
+		t.Errorf("expected combined error message containing 'waiting for scan failed', got: %s", err.Error())
+	}
+	if !strings.Contains(err.Error(), "describing findings also failed") {
+		t.Errorf("expected combined error message containing 'describing findings also failed', got: %s", err.Error())
+	}
+}
+
+func TestGetScanResults_NonScanNotFoundError_FallbackNotUnsupported(t *testing.T) {
+	waiterErr := fmt.Errorf("waiter failed: unexpected status")
+	waiter := &mockScanWaiter{
+		results: []waiterResult{{err: waiterErr}},
+	}
+	describer := &mockScanDescriber{
+		results: []describerResult{{
+			output: &ecr.DescribeImageScanFindingsOutput{
+				ImageScanStatus: &types.ImageScanStatus{
+					Status:      types.ScanStatusFailed,
+					Description: aws.String("Some other failure reason"),
+				},
+				ImageScanFindings: &types.ImageScanFindings{},
+			},
+		}},
+	}
+
+	_, err := getImageScanResultsWithWaiter(waiter, describer, testScanInput(), time.Minute, fastRetryConfig(3))
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	// Should return the original waiter error
+	if err.Error() != waiterErr.Error() {
+		t.Errorf("expected original waiter error %q, got: %q", waiterErr.Error(), err.Error())
+	}
+}
+
+func TestGetScanResults_Pagination(t *testing.T) {
+	nextToken := "page2"
+	waiter := &mockScanWaiter{
+		results: []waiterResult{{
+			output: &ecr.DescribeImageScanFindingsOutput{
+				ImageScanStatus: &types.ImageScanStatus{Status: types.ScanStatusComplete},
+				ImageScanFindings: &types.ImageScanFindings{
+					Findings: []types.ImageScanFinding{
+						{Name: aws.String("CVE-2024-0001"), Severity: types.FindingSeverityHigh},
+					},
+				},
+				NextToken: &nextToken,
+			},
+		}},
+	}
+	describer := &mockScanDescriber{
+		results: []describerResult{{
+			output: &ecr.DescribeImageScanFindingsOutput{
+				ImageScanFindings: &types.ImageScanFindings{
+					Findings: []types.ImageScanFinding{
+						{Name: aws.String("CVE-2024-0002"), Severity: types.FindingSeverityLow},
+					},
+				},
+				// No NextToken = last page
+			},
+		}},
+	}
+
+	findings, err := getImageScanResultsWithWaiter(waiter, describer, testScanInput(), time.Minute, fastRetryConfig(3))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(findings) != 2 {
+		t.Fatalf("expected 2 findings across pages, got %d", len(findings))
+	}
+	if *findings[0].Name != "CVE-2024-0001" {
+		t.Errorf("expected CVE-2024-0001, got %s", *findings[0].Name)
+	}
+	if *findings[1].Name != "CVE-2024-0002" {
+		t.Errorf("expected CVE-2024-0002, got %s", *findings[1].Name)
+	}
+	if describer.calls != 1 {
+		t.Errorf("expected 1 describer call for pagination, got %d", describer.calls)
+	}
+}
+
+func TestGetScanResults_PaginationError(t *testing.T) {
+	nextToken := "page2"
+	waiter := &mockScanWaiter{
+		results: []waiterResult{{
+			output: &ecr.DescribeImageScanFindingsOutput{
+				ImageScanStatus: &types.ImageScanStatus{Status: types.ScanStatusComplete},
+				ImageScanFindings: &types.ImageScanFindings{
+					Findings: []types.ImageScanFinding{
+						{Name: aws.String("CVE-2024-0001"), Severity: types.FindingSeverityHigh},
+					},
+				},
+				NextToken: &nextToken,
+			},
+		}},
+	}
+	describer := &mockScanDescriber{
+		results: []describerResult{{err: fmt.Errorf("pagination failed")}},
+	}
+
+	_, err := getImageScanResultsWithWaiter(waiter, describer, testScanInput(), time.Minute, fastRetryConfig(3))
+	if err == nil {
+		t.Fatal("expected error from pagination failure, got nil")
+	}
+	if !strings.Contains(err.Error(), "pagination failed") {
+		t.Errorf("expected pagination error, got: %s", err.Error())
 	}
 }

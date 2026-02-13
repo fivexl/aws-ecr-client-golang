@@ -303,6 +303,24 @@ func newUnsupportedImageFinding(description string) []types.ImageScanFinding {
 	}}
 }
 
+// imageScanWaiter abstracts the WaitForOutput method of ecr.ImageScanCompleteWaiter
+// to allow testing without a real AWS client.
+type imageScanWaiter interface {
+	WaitForOutput(ctx context.Context, params *ecr.DescribeImageScanFindingsInput, maxWaitDur time.Duration, optFns ...func(*ecr.ImageScanCompleteWaiterOptions)) (*ecr.DescribeImageScanFindingsOutput, error)
+}
+
+// imageScanDescriber abstracts the DescribeImageScanFindings API call
+// to allow testing without a real AWS client.
+type imageScanDescriber interface {
+	DescribeImageScanFindings(ctx context.Context, params *ecr.DescribeImageScanFindingsInput, optFns ...func(*ecr.Options)) (*ecr.DescribeImageScanFindingsOutput, error)
+}
+
+// scanRetryConfig controls the retry behavior when waiting for a scan to be initiated.
+type scanRetryConfig struct {
+	retryInterval time.Duration
+	maxRetries    int
+}
+
 func GetImageScanResults(client *ecr.Client, imageId ImageId, ecrRepoName string, timeout time.Duration) ([]types.ImageScanFinding, error) {
 	imageIdentifier, err := imageId.ToImageIdentifier()
 	if err != nil {
@@ -322,22 +340,29 @@ func GetImageScanResults(client *ecr.Client, imageId ImageId, ecrRepoName string
 		RepositoryName: &ecrRepoName,
 	}
 
+	w := ecr.NewImageScanCompleteWaiter(client)
+	retryCfg := scanRetryConfig{
+		retryInterval: 15 * time.Second,
+		maxRetries:    20, // up to 5 minutes of waiting for scan to be initiated
+	}
+	return getImageScanResultsWithWaiter(w, client, input, timeout, retryCfg)
+}
+
+// getImageScanResultsWithWaiter contains the core scan-result retrieval logic, accepting
+// interfaces for the waiter and describer so it can be tested without a real AWS client.
+func getImageScanResultsWithWaiter(waiter imageScanWaiter, describer imageScanDescriber, input ecr.DescribeImageScanFindingsInput, timeout time.Duration, retryCfg scanRetryConfig) ([]types.ImageScanFinding, error) {
 	var findings []types.ImageScanFinding
 
 	// With AWS native basic scanning, there can be a delay between pushing an image
 	// and the scan becoming available. The ImageScanCompleteWaiter treats
 	// ScanNotFoundException as a terminal error instead of retrying. We handle this
-	// by retrying the waiter when we get ScanNotFoundException, up to the overall timeout.
-	const scanInitRetryInterval = 15 * time.Second
-	const maxScanInitRetries = 20 // up to 5 minutes of waiting for scan to be initiated
+	// by retrying the waiter when we get ScanNotFoundException, up to the configured limit.
 	var output *ecr.DescribeImageScanFindingsOutput
 
-	w := ecr.NewImageScanCompleteWaiter(client)
-
 	var waiterErr error
-	for attempt := 0; attempt <= maxScanInitRetries; attempt++ {
-		debugf("WaitForOutput attempt %d/%d", attempt+1, maxScanInitRetries+1)
-		output, waiterErr = w.WaitForOutput(context.TODO(), &input, timeout)
+	for attempt := 0; attempt <= retryCfg.maxRetries; attempt++ {
+		debugf("WaitForOutput attempt %d/%d", attempt+1, retryCfg.maxRetries+1)
+		output, waiterErr = waiter.WaitForOutput(context.TODO(), &input, timeout)
 		if waiterErr == nil {
 			debugf("WaitForOutput succeeded")
 			break
@@ -346,14 +371,19 @@ func GetImageScanResults(client *ecr.Client, imageId ImageId, ecrRepoName string
 		// Check if the waiter failed because the scan doesn't exist yet
 		var scanNotFound *types.ScanNotFoundException
 		if errors.As(waiterErr, &scanNotFound) {
-			if attempt < maxScanInitRetries {
+			if attempt < retryCfg.maxRetries {
 				fmt.Printf("Scan not yet initiated, retrying in %s (attempt %d/%d)...\n",
-					scanInitRetryInterval, attempt+1, maxScanInitRetries)
-				time.Sleep(scanInitRetryInterval)
+					retryCfg.retryInterval, attempt+1, retryCfg.maxRetries)
+				time.Sleep(retryCfg.retryInterval)
 				continue
 			}
-			// Exhausted retries - treat as unsupported image
-			return newUnsupportedImageFinding("Image scan does not exist - image is not supported for scanning"), nil
+			// Exhausted retries - return an error rather than silently treating as
+			// unsupported image. A persistent ScanNotFoundException likely indicates
+			// a transient AWS issue rather than a truly unscannable image, and
+			// silently returning ECR_ERROR_UNSUPPORTED_IMAGE would let unscanned
+			// images pass through the security gate for users who ignore that finding.
+			return nil, fmt.Errorf("scan not found after %d retries over %s: %w",
+				retryCfg.maxRetries, time.Duration(retryCfg.maxRetries)*retryCfg.retryInterval, waiterErr)
 		}
 		// For non-ScanNotFound errors, fall through to legacy error handling
 		break
@@ -365,7 +395,7 @@ func GetImageScanResults(client *ecr.Client, imageId ImageId, ecrRepoName string
 		// returns ScanStatusFailed with "UnsupportedImageError" in the description instead
 		// of ScanStatusUnsupportedImage. That causes WaitForOutput to return the error.
 		// So here we have to check the status description for "UnsupportedImageError" separately.
-		failedOutput, describeErr := client.DescribeImageScanFindings(context.TODO(), &input)
+		failedOutput, describeErr := describer.DescribeImageScanFindings(context.TODO(), &input)
 		if describeErr != nil {
 			debugf("Fallback DescribeImageScanFindings also failed: %v", describeErr)
 			return nil, fmt.Errorf("waiting for scan failed: %w, and describing findings also failed: %w", waiterErr, describeErr)
@@ -386,7 +416,7 @@ func GetImageScanResults(client *ecr.Client, imageId ImageId, ecrRepoName string
 	// Paginate through remaining results if there are more pages
 	for output.NextToken != nil {
 		input.NextToken = output.NextToken
-		paginatedOutput, paginateErr := client.DescribeImageScanFindings(context.TODO(), &input)
+		paginatedOutput, paginateErr := describer.DescribeImageScanFindings(context.TODO(), &input)
 		if paginateErr != nil {
 			return nil, paginateErr
 		}

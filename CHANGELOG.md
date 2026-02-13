@@ -1,3 +1,9 @@
+### v0.7.2
+
+* Fix: exhausted ScanNotFoundException retries now return an error instead of silently treating the image as unsupported. Previously, if the scan failed to initiate after all retries (e.g. due to a transient AWS issue), the tool would return an ECR_ERROR_UNSUPPORTED_IMAGE finding with no error, allowing unscanned images to pass through the security gate for users who ignore that finding.
+* Refactor scan result retrieval into a testable internal function with interfaces for the ECR waiter and describer
+* Add comprehensive unit tests for all scan result retrieval branches: immediate success, ScanNotFound retry then success, retries exhausted, fallback UnsupportedImageError detection, fallback failures, and pagination
+
 ### v0.7.1
 
 * Fix InvalidParameterException when Docker push stream returns empty imageDigest (e.g. buildx with OCI index / multi-platform manifest lists)
