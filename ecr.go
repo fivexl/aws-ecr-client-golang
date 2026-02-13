@@ -21,6 +21,7 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -158,6 +159,140 @@ func GetECRRepo(registryName string) (reference.Named, error) {
 		return nil, fmt.Errorf("unexpected ECR registry name %s. Expected format: AWS_ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/myrepo/name", registryName)
 	}
 	return reg, nil
+}
+
+// Media types for manifest lists / OCI image indexes.
+const (
+	mediaTypeDockerManifestList = "application/vnd.docker.distribution.manifest.list.v2+json"
+	mediaTypeOCIImageIndex      = "application/vnd.oci.image.index.v1+json"
+)
+
+// manifestPlatform represents the platform section of a manifest entry.
+type manifestPlatform struct {
+	Architecture string `json:"architecture"`
+	OS           string `json:"os"`
+	Variant      string `json:"variant,omitempty"`
+}
+
+// manifestEntry represents a single manifest in a manifest list or OCI image index.
+type manifestEntry struct {
+	MediaType string           `json:"mediaType"`
+	Digest    string           `json:"digest"`
+	Size      int              `json:"size"`
+	Platform  manifestPlatform `json:"platform"`
+}
+
+// manifestIndex represents a Docker manifest list or OCI image index.
+type manifestIndex struct {
+	SchemaVersion int             `json:"schemaVersion"`
+	MediaType     string          `json:"mediaType"`
+	Manifests     []manifestEntry `json:"manifests"`
+}
+
+// selectPlatformDigest picks the best platform image digest from a manifest list JSON.
+// It prefers linux/amd64, then any linux image, then the first manifest with a known OS.
+// Returns the digest of the selected platform image, or an error if the manifest list
+// is empty or cannot be parsed.
+func selectPlatformDigest(manifestJSON string) (string, string, string, error) {
+	var ml manifestIndex
+	if err := json.Unmarshal([]byte(manifestJSON), &ml); err != nil {
+		return "", "", "", fmt.Errorf("failed to parse manifest list: %w", err)
+	}
+
+	if len(ml.Manifests) == 0 {
+		return "", "", "", fmt.Errorf("manifest list is empty, no platform images to scan")
+	}
+
+	// Prefer linux/amd64
+	for _, m := range ml.Manifests {
+		if m.Platform.OS == "linux" && m.Platform.Architecture == "amd64" {
+			return m.Digest, m.Platform.OS, m.Platform.Architecture, nil
+		}
+	}
+
+	// Fallback: first linux image of any architecture
+	for _, m := range ml.Manifests {
+		if m.Platform.OS == "linux" {
+			return m.Digest, m.Platform.OS, m.Platform.Architecture, nil
+		}
+	}
+
+	// Fallback: first manifest with a known OS (skip attestation manifests etc.)
+	for _, m := range ml.Manifests {
+		if m.Platform.OS != "" && m.Platform.OS != "unknown" {
+			return m.Digest, m.Platform.OS, m.Platform.Architecture, nil
+		}
+	}
+
+	// Last resort: use the first manifest
+	m := ml.Manifests[0]
+	return m.Digest, m.Platform.OS, m.Platform.Architecture, nil
+}
+
+// ResolveImageIndexDigest checks if the given image is a manifest list / OCI image index.
+// If it is, it returns an ImageId with the digest of a platform-specific image suitable
+// for scanning (preferring linux/amd64). If it's not an index or the check fails,
+// returns the original ImageId unchanged.
+func ResolveImageIndexDigest(client *ecr.Client, imageId ImageId, repoName string) (ImageId, error) {
+	imageIdentifier, err := imageId.ToImageIdentifier()
+	if err != nil {
+		debugf("ResolveImageIndexDigest: cannot build identifier: %v", err)
+		return imageId, nil
+	}
+
+	// Request manifest lists and regular manifests so we get whatever type the image is
+	acceptedMediaTypes := []string{
+		mediaTypeDockerManifestList,
+		mediaTypeOCIImageIndex,
+		"application/vnd.docker.distribution.manifest.v2+json",
+		"application/vnd.oci.image.manifest.v1+json",
+	}
+
+	input := &ecr.BatchGetImageInput{
+		RepositoryName:     &repoName,
+		ImageIds:           []types.ImageIdentifier{*imageIdentifier},
+		AcceptedMediaTypes: acceptedMediaTypes,
+	}
+
+	debugf("ResolveImageIndexDigest: calling BatchGetImage for repo=%q", repoName)
+	output, err := client.BatchGetImage(context.TODO(), input)
+	if err != nil {
+		debugf("ResolveImageIndexDigest: BatchGetImage failed: %v", err)
+		return imageId, nil
+	}
+
+	if len(output.Images) == 0 {
+		debugf("ResolveImageIndexDigest: BatchGetImage returned no images")
+		return imageId, nil
+	}
+
+	image := output.Images[0]
+	if image.ImageManifestMediaType == nil || image.ImageManifest == nil {
+		debugf("ResolveImageIndexDigest: image has no manifest media type or manifest content")
+		return imageId, nil
+	}
+
+	mediaType := *image.ImageManifestMediaType
+	debugf("ResolveImageIndexDigest: manifest media type is %s", mediaType)
+
+	if mediaType != mediaTypeDockerManifestList && mediaType != mediaTypeOCIImageIndex {
+		debugf("ResolveImageIndexDigest: not a manifest list/image index, using original ImageId")
+		return imageId, nil
+	}
+
+	// It's a manifest list / image index - resolve to a platform image
+	digest, os, arch, err := selectPlatformDigest(*image.ImageManifest)
+	if err != nil {
+		return imageId, fmt.Errorf("image is a manifest list but failed to select platform image: %w", err)
+	}
+
+	fmt.Printf("Image is a manifest list/image index (%s), resolved to platform image %s/%s (digest: %s) for scanning\n",
+		mediaType, os, arch, digest)
+
+	return ImageId{
+		digest: digest,
+		tag:    "", // Platform images in a manifest list are referenced by digest, not tag
+	}, nil
 }
 
 func newUnsupportedImageFinding(description string) []types.ImageScanFinding {

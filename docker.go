@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 
 	"github.com/aws/aws-sdk-go-v2/service/ecr/types"
 	dockerTypes "github.com/docker/docker/api/types"
@@ -33,6 +34,14 @@ import (
 	dockerClient "github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/jsonmessage"
 )
+
+// statusDigestRe matches the digest in a Docker push status line.
+// Format: "TAG: digest: sha256:abc123def456 size: 1234"
+var statusDigestRe = regexp.MustCompile(`\bdigest: (sha256:[a-fA-F0-9]+)`)
+
+// statusTagRe extracts the tag from a Docker push status line that contains a digest.
+// Format: "TAG: digest: sha256:abc123def456 size: 1234"
+var statusTagRe = regexp.MustCompile(`^(.+): digest:`)
 
 type ImageId struct {
 	digest string
@@ -90,6 +99,10 @@ func imageTag(client *dockerClient.Client, imageId string, newImageId string) er
 
 func getImageIdFromDockerDaemonJsonMessages(message bytes.Buffer) (ImageId, error) {
 	var result ImageId
+	// Track digest/tag parsed from status lines as fallback for when
+	// no Aux message is present (e.g. buildx multi-platform pushes).
+	var statusDigest, statusTag string
+
 	decoder := json.NewDecoder(&message)
 	for {
 		var jsonMessage jsonmessage.JSONMessage
@@ -113,7 +126,32 @@ func getImageIdFromDockerDaemonJsonMessages(message bytes.Buffer) (ImageId, erro
 			result.tag = r.Tag
 			result.digest = r.Digest
 		}
+		// Parse digest and tag from status lines as a fallback.
+		// Docker push streams for multi-platform/buildx images often include
+		// the digest only in a status line like:
+		//   "TAG: digest: sha256:abc123 size: 1234"
+		if jsonMessage.Status != "" {
+			if m := statusDigestRe.FindStringSubmatch(jsonMessage.Status); len(m) > 1 {
+				statusDigest = m[1]
+				debugf("Parsed digest from status line: %s", statusDigest)
+			}
+			if m := statusTagRe.FindStringSubmatch(jsonMessage.Status); len(m) > 1 {
+				statusTag = m[1]
+				debugf("Parsed tag from status line: %s", statusTag)
+			}
+		}
 	}
+
+	// If Aux messages didn't provide digest/tag, use values from status lines
+	if result.digest == "" && statusDigest != "" {
+		debugf("No digest from Aux, using digest from status line: %s", statusDigest)
+		result.digest = statusDigest
+	}
+	if result.tag == "" && statusTag != "" {
+		debugf("No tag from Aux, using tag from status line: %s", statusTag)
+		result.tag = statusTag
+	}
+
 	debugf("Final ImageId from push stream: digest=%q (len=%d) tag=%q", result.digest, len(result.digest), result.tag)
 	return result, nil
 }

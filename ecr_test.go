@@ -253,6 +253,147 @@ func TestGetECRRepo_InvalidFormat(t *testing.T) {
 	}
 }
 
+func TestSelectPlatformDigest_PrefersLinuxAmd64(t *testing.T) {
+	manifest := `{
+		"schemaVersion": 2,
+		"mediaType": "application/vnd.oci.image.index.v1+json",
+		"manifests": [
+			{
+				"mediaType": "application/vnd.oci.image.manifest.v1+json",
+				"digest": "sha256:arm64digest",
+				"size": 1234,
+				"platform": {"architecture": "arm64", "os": "linux"}
+			},
+			{
+				"mediaType": "application/vnd.oci.image.manifest.v1+json",
+				"digest": "sha256:amd64digest",
+				"size": 5678,
+				"platform": {"architecture": "amd64", "os": "linux"}
+			}
+		]
+	}`
+	digest, os, arch, err := selectPlatformDigest(manifest)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if digest != "sha256:amd64digest" {
+		t.Errorf("expected sha256:amd64digest, got %s", digest)
+	}
+	if os != "linux" || arch != "amd64" {
+		t.Errorf("expected linux/amd64, got %s/%s", os, arch)
+	}
+}
+
+func TestSelectPlatformDigest_FallsBackToLinux(t *testing.T) {
+	manifest := `{
+		"schemaVersion": 2,
+		"mediaType": "application/vnd.docker.distribution.manifest.list.v2+json",
+		"manifests": [
+			{
+				"mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+				"digest": "sha256:windowsdigest",
+				"size": 1234,
+				"platform": {"architecture": "amd64", "os": "windows"}
+			},
+			{
+				"mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+				"digest": "sha256:linuxarm64",
+				"size": 5678,
+				"platform": {"architecture": "arm64", "os": "linux"}
+			}
+		]
+	}`
+	digest, os, arch, err := selectPlatformDigest(manifest)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if digest != "sha256:linuxarm64" {
+		t.Errorf("expected sha256:linuxarm64, got %s", digest)
+	}
+	if os != "linux" || arch != "arm64" {
+		t.Errorf("expected linux/arm64, got %s/%s", os, arch)
+	}
+}
+
+func TestSelectPlatformDigest_SkipsAttestationManifests(t *testing.T) {
+	// Buildx often includes attestation manifests with "unknown" OS
+	manifest := `{
+		"schemaVersion": 2,
+		"mediaType": "application/vnd.oci.image.index.v1+json",
+		"manifests": [
+			{
+				"mediaType": "application/vnd.oci.image.manifest.v1+json",
+				"digest": "sha256:attestation1",
+				"size": 500,
+				"platform": {"architecture": "unknown", "os": "unknown"}
+			},
+			{
+				"mediaType": "application/vnd.oci.image.manifest.v1+json",
+				"digest": "sha256:realimage",
+				"size": 5678,
+				"platform": {"architecture": "amd64", "os": "linux"}
+			},
+			{
+				"mediaType": "application/vnd.oci.image.manifest.v1+json",
+				"digest": "sha256:attestation2",
+				"size": 500,
+				"platform": {"architecture": "unknown", "os": "unknown"}
+			}
+		]
+	}`
+	digest, _, _, err := selectPlatformDigest(manifest)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if digest != "sha256:realimage" {
+		t.Errorf("expected sha256:realimage, got %s", digest)
+	}
+}
+
+func TestSelectPlatformDigest_EmptyManifestList(t *testing.T) {
+	manifest := `{
+		"schemaVersion": 2,
+		"mediaType": "application/vnd.oci.image.index.v1+json",
+		"manifests": []
+	}`
+	_, _, _, err := selectPlatformDigest(manifest)
+	if err == nil {
+		t.Fatal("expected error for empty manifest list, got nil")
+	}
+}
+
+func TestSelectPlatformDigest_InvalidJSON(t *testing.T) {
+	_, _, _, err := selectPlatformDigest("not valid json")
+	if err == nil {
+		t.Fatal("expected error for invalid JSON, got nil")
+	}
+}
+
+func TestSelectPlatformDigest_SingleManifest(t *testing.T) {
+	manifest := `{
+		"schemaVersion": 2,
+		"mediaType": "application/vnd.oci.image.index.v1+json",
+		"manifests": [
+			{
+				"mediaType": "application/vnd.oci.image.manifest.v1+json",
+				"digest": "sha256:onlyone",
+				"size": 5678,
+				"platform": {"architecture": "arm64", "os": "linux"}
+			}
+		]
+	}`
+	digest, os, arch, err := selectPlatformDigest(manifest)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if digest != "sha256:onlyone" {
+		t.Errorf("expected sha256:onlyone, got %s", digest)
+	}
+	if os != "linux" || arch != "arm64" {
+		t.Errorf("expected linux/arm64, got %s/%s", os, arch)
+	}
+}
+
 func TestNewUnsupportedImageFinding(t *testing.T) {
 	findings := newUnsupportedImageFinding("test description")
 	if len(findings) != 1 {

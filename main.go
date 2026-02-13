@@ -184,6 +184,17 @@ func main() {
 		}
 		// Get the ECR repo name without the domain part, like: `some/repo/name`
 		stageRepoPath := reference.Path(stageRepoNamed)
+
+		// If the pushed image is a manifest list / OCI image index (common with
+		// buildx multi-platform builds), resolve it to a platform-specific image
+		// digest for scanning. ECR scanning only works on individual images, not
+		// manifest lists.
+		imageId, err = ResolveImageIndexDigest(client, imageId, stageRepoPath)
+		if err != nil {
+			return fmt.Errorf("failed to resolve image index for scanning: %w", err)
+		}
+		debugf("ImageId after index resolution: digest=%q tag=%q", imageId.digest, imageId.tag)
+
 		timeout := time.Duration(scanWaitTimeout) * time.Minute
 		findings, err := GetImageScanResults(client, imageId, stageRepoPath, timeout)
 		if err != nil {

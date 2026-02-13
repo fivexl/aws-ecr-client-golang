@@ -196,6 +196,101 @@ func TestGetImageIdFromDockerDaemonJsonMessages_ErrorInStream(t *testing.T) {
 	}
 }
 
+// buildBuildxPushStream creates a Docker push stream typical of buildx multi-platform pushes,
+// where digest appears only in a status line (no Aux message).
+func buildBuildxPushStream(t *testing.T, tag string, digest string) bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+
+	messages := []jsonmessage.JSONMessage{
+		{Status: "The push refers to repository [655141976367.dkr.ecr.us-east-1.amazonaws.com/scanning-silo]"},
+		{Status: "Pushing", ID: "231ab91668a2"},
+		{Status: "Layer already exists", ID: "5e728e3b86c3"},
+		{Status: "Pushed", ID: "231ab91668a2"},
+		{Status: tag + ": digest: " + digest + " size: 856"},
+	}
+	for _, msg := range messages {
+		if err := encoder.Encode(msg); err != nil {
+			t.Fatalf("failed to encode message: %v", err)
+		}
+	}
+	return buf
+}
+
+func TestGetImageIdFromDockerDaemonJsonMessages_StatusLineDigest(t *testing.T) {
+	// Simulates a buildx push where digest appears only in the status line
+	buf := buildBuildxPushStream(t, "ecs-client-scan-1770945217", "sha256:f3e2f14b6090fb84006e2cce5eb42421a575497b23e4c92c9eadad970c5f6c2d")
+	result, err := getImageIdFromDockerDaemonJsonMessages(buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.digest != "sha256:f3e2f14b6090fb84006e2cce5eb42421a575497b23e4c92c9eadad970c5f6c2d" {
+		t.Errorf("expected digest sha256:f3e2f14b...c2d, got %q", result.digest)
+	}
+	if result.tag != "ecs-client-scan-1770945217" {
+		t.Errorf("expected tag ecs-client-scan-1770945217, got %q", result.tag)
+	}
+}
+
+func TestGetImageIdFromDockerDaemonJsonMessages_AuxTakesPriority(t *testing.T) {
+	// When both Aux and status line have a digest, Aux should win
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+
+	// Status line with one digest
+	if err := encoder.Encode(jsonmessage.JSONMessage{
+		Status: "mytag: digest: sha256:statusdigest000 size: 856",
+	}); err != nil {
+		t.Fatalf("failed to encode: %v", err)
+	}
+
+	// Aux message with different digest
+	pushResult := dockerTypes.PushResult{Digest: "sha256:auxdigest999", Tag: "auxtag"}
+	auxBytes, _ := json.Marshal(pushResult)
+	raw := json.RawMessage(auxBytes)
+	if err := encoder.Encode(jsonmessage.JSONMessage{Aux: &raw}); err != nil {
+		t.Fatalf("failed to encode: %v", err)
+	}
+
+	result, err := getImageIdFromDockerDaemonJsonMessages(buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.digest != "sha256:auxdigest999" {
+		t.Errorf("expected Aux digest sha256:auxdigest999, got %q", result.digest)
+	}
+	if result.tag != "auxtag" {
+		t.Errorf("expected Aux tag auxtag, got %q", result.tag)
+	}
+}
+
+func TestGetImageIdFromDockerDaemonJsonMessages_StatusLineNoDigest(t *testing.T) {
+	// Status lines without the digest pattern should not produce a digest
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	messages := []jsonmessage.JSONMessage{
+		{Status: "Pushing"},
+		{Status: "Layer already exists"},
+		{Status: "Pushed"},
+	}
+	for _, msg := range messages {
+		if err := encoder.Encode(msg); err != nil {
+			t.Fatalf("failed to encode: %v", err)
+		}
+	}
+	result, err := getImageIdFromDockerDaemonJsonMessages(buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.digest != "" {
+		t.Errorf("expected empty digest, got %q", result.digest)
+	}
+	if result.tag != "" {
+		t.Errorf("expected empty tag, got %q", result.tag)
+	}
+}
+
 func TestGetImageIdFromDockerDaemonJsonMessages_MultipleAuxMessages(t *testing.T) {
 	// When multiple Aux messages are present, the last one should win
 	var buf bytes.Buffer
