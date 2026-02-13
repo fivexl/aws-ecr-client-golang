@@ -106,6 +106,14 @@ func main() {
 				EnvVars:     []string{"AWS_ECR_CLIENT_SKIP_PUSH"},
 				Destination: &skipPush,
 			},
+			&cli.BoolFlag{
+				Name:        "debug",
+				Value:       false,
+				DefaultText: "false",
+				Usage:       "Enable debug output (prints raw Docker push stream, image identifiers, scan parameters, etc.).",
+				EnvVars:     []string{"AWS_ECR_CLIENT_DEBUG"},
+				Destination: &debugEnabled,
+			},
 		},
 	}
 
@@ -156,6 +164,8 @@ func main() {
 			return err
 		}
 
+		debugf("ImageId after push: digest=%q tag=%q", imageId.digest, imageId.tag)
+
 		// Ensure we have at least the tag we pushed with, in case the Docker
 		// daemon push stream did not include it in the Aux message.
 		if imageId.tag == "" {
@@ -165,6 +175,7 @@ func main() {
 		if imageId.digest == "" {
 			fmt.Printf("Warning: Docker push did not return a digest, will identify image by tag only\n")
 		}
+		debugf("ImageId used for scan query: digest=%q tag=%q", imageId.digest, imageId.tag)
 
 		fmt.Printf("Checking scan result for the image %s\n", stageImageRef.String())
 		client, err := GetECRClient()

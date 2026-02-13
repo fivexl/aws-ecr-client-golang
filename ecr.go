@@ -173,6 +173,15 @@ func GetImageScanResults(client *ecr.Client, imageId ImageId, ecrRepoName string
 	if err != nil {
 		return nil, fmt.Errorf("cannot query scan results: %w", err)
 	}
+	digestStr := "<nil>"
+	if imageIdentifier.ImageDigest != nil {
+		digestStr = *imageIdentifier.ImageDigest
+	}
+	tagStr := "<nil>"
+	if imageIdentifier.ImageTag != nil {
+		tagStr = *imageIdentifier.ImageTag
+	}
+	debugf("GetImageScanResults: repo=%q imageDigest=%q imageTag=%q timeout=%s", ecrRepoName, digestStr, tagStr, timeout)
 	input := ecr.DescribeImageScanFindingsInput{
 		ImageId:        imageIdentifier,
 		RepositoryName: &ecrRepoName,
@@ -192,10 +201,13 @@ func GetImageScanResults(client *ecr.Client, imageId ImageId, ecrRepoName string
 
 	var waiterErr error
 	for attempt := 0; attempt <= maxScanInitRetries; attempt++ {
+		debugf("WaitForOutput attempt %d/%d", attempt+1, maxScanInitRetries+1)
 		output, waiterErr = w.WaitForOutput(context.TODO(), &input, timeout)
 		if waiterErr == nil {
+			debugf("WaitForOutput succeeded")
 			break
 		}
+		debugf("WaitForOutput error: %v (type: %T)", waiterErr, waiterErr)
 		// Check if the waiter failed because the scan doesn't exist yet
 		var scanNotFound *types.ScanNotFoundException
 		if errors.As(waiterErr, &scanNotFound) {
@@ -213,14 +225,18 @@ func GetImageScanResults(client *ecr.Client, imageId ImageId, ecrRepoName string
 	}
 
 	if waiterErr != nil {
+		debugf("Waiter failed, attempting fallback DescribeImageScanFindings")
 		// Handle unsupported images with Clair-based scanning: DescribeImageScanFindings
 		// returns ScanStatusFailed with "UnsupportedImageError" in the description instead
 		// of ScanStatusUnsupportedImage. That causes WaitForOutput to return the error.
 		// So here we have to check the status description for "UnsupportedImageError" separately.
 		failedOutput, describeErr := client.DescribeImageScanFindings(context.TODO(), &input)
 		if describeErr != nil {
+			debugf("Fallback DescribeImageScanFindings also failed: %v", describeErr)
 			return nil, fmt.Errorf("waiting for scan failed: %w, and describing findings also failed: %w", waiterErr, describeErr)
 		}
+		debugf("Fallback DescribeImageScanFindings status=%q description=%v",
+			failedOutput.ImageScanStatus.Status, failedOutput.ImageScanStatus.Description)
 		if failedOutput.ImageScanStatus.Status == types.ScanStatusFailed &&
 			failedOutput.ImageScanStatus.Description != nil &&
 			strings.Contains(*failedOutput.ImageScanStatus.Description, "UnsupportedImageError") {
