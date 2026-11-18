@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [ master, main ]
 
+permissions:
+  contents: write # goreleaser publishes the GitHub release
+  id-token: write # OIDC role for the release upload
+
 jobs:
 
   build:
@@ -48,10 +52,13 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Configure AWS credentials
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
     - name: Upload Artifacts to releases.fivexl.io
       if: startsWith(github.ref, 'refs/tags/v')
-      env:
-        AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       run: aws s3 sync ./dist/ s3://${{ secrets.RELEASE_BUCKET }}/aws-ecr-client-golang/${{ github.ref_name }}/ --exclude "*" --include "*.zip" --include "checksums.txt"
